@@ -84,20 +84,17 @@ class _SaleScreenState extends State<SaleScreen> {
   }
 
   Future<void> _search() async {
-    final p = await pickProduct(context);
+    final p = await pickProduct(context, forSale: true);
     if (p != null) await _add(p);
   }
 
   Future<void> _scan() async {
     final code = await BarcodeScanScreen.scan(context);
     if (code == null || !mounted) return;
-    final p = await ProductService.instance.byBarcode(code);
-    if (!mounted) return;
-    if (p == null) {
-      _snack('Товар со штрихкодом $code не найден');
-    } else {
-      await _add(p);
-    }
+    final p = await resolveBarcode(context, code);
+    if (!mounted || p == null) return;
+    if (!p.active) return _snack('«${p.name}» отключён и не продаётся');
+    await _add(p);
   }
 
   void _snack(String t) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
@@ -178,6 +175,37 @@ class _SaleScreenState extends State<SaleScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_busy, // пока сохраняется продажа — выйти нельзя
+      child: Stack(children: [
+        _screen(),
+        // После нажатия «Оплатить» экран блокируется, пока продажа не сохранится:
+        // нельзя нажать второй раз или изменить корзину (даже если интернет «завис»).
+        if (_busy)
+          Positioned.fill(
+            child: AbsorbPointer(
+              child: Container(
+                color: Colors.black.withOpacity(0.35),
+                alignment: Alignment.center,
+                child: GlassCard(
+                  radius: 16,
+                  padding: EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 12),
+                    Text('Сохраняю продажу…',
+                        style: TextStyle(
+                            color: AppColors.text, fontWeight: FontWeight.w700, decoration: TextDecoration.none)),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+
+  Widget _screen() {
     return Scaffold(
       body: GlassBackground(
         child: Column(children: [
@@ -271,11 +299,21 @@ class _SaleScreenState extends State<SaleScreen> {
               Text(l.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w700, fontSize: 14)),
-              Text('${money(l.price)} · ост. ${qtyText(left)} ${l.unit}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: left <= 0 ? AppColors.warn : AppColors.textDim, fontSize: 11)),
+                  style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w800, fontSize: 15)),
+              Text.rich(
+                TextSpan(children: [
+                  TextSpan(text: '${money(l.price)} · ост. '),
+                  TextSpan(
+                      text: '${qtyText(left)} ${l.unit}',
+                      style: TextStyle(
+                          color: left <= 0 ? AppColors.warn : AppColors.accent,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13)),
+                ]),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: AppColors.textDim, fontSize: 12),
+              ),
             ]),
           ),
           _small(Icons.remove, 'Меньше', () => setState(() {

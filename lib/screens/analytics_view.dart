@@ -218,9 +218,12 @@ class AnalyticsViewState extends State<AnalyticsView> {
         radius: 20,
         padding: EdgeInsets.fromLTRB(12, 8, 12, 8),
         onTap: onTap,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: TextStyle(color: AppColors.textDim, fontSize: 12)),
-          SizedBox(height: 6),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: AppColors.textDim, fontSize: 12)),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
@@ -252,7 +255,10 @@ class AnalyticsViewState extends State<AnalyticsView> {
     ];
     return LayoutBuilder(builder: (c, box) {
       final w = (box.maxWidth - 10) / 2;
-      return Wrap(spacing: 8, runSpacing: 8, children: [for (final t in tiles) SizedBox(width: w, child: t)]);
+      // Все KPI-блоки одного размера: одинаковая ширина И одинаковая высота.
+      return Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final t in tiles) SizedBox(width: w, height: 82, child: t),
+      ]);
     });
   }
 
@@ -288,9 +294,9 @@ class AnalyticsViewState extends State<AnalyticsView> {
                   ),
                 for (final s in _stock!)
                   Padding(
-                    padding: EdgeInsets.symmetric(vertical: 10),
+                    padding: EdgeInsets.symmetric(vertical: 6),
                     child: Row(children: [
-                      Expanded(child: Text(s.name, style: TextStyle(color: AppColors.text))),
+                      Expanded(child: Text(s.name, style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w600))),
                       Text('${qtyText(s.qty)} ${s.unit} · ${money(s.sum)}',
                           style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w700)),
                     ]),

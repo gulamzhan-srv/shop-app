@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../services/supplier_debt_service.dart';
 import '../ui/format.dart';
 import '../ui/glass.dart';
+import '../ui/pay_dialog.dart';
 
 class SupplierDebtsScreen extends StatefulWidget {
   SupplierDebtsScreen({super.key});
@@ -199,57 +200,21 @@ class _SupplierDebtScreenState extends State<SupplierDebtScreen> {
   double get _owed => _docs.fold(0, (s, x) => s + x.remaining);
 
   Future<void> _pay() async {
-    final amount = TextEditingController(text: qtyText(_owed.roundToDouble()));
-    final comment = TextEditingController();
-    String method = 'cash';
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, setD) => AlertDialog(
-          title: Text('Оплата поставщику'),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(
-                controller: amount,
-                autofocus: true,
-                keyboardType: TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(labelText: 'Сумма, ₸ (долг ${money(_owed)})'),
-              ),
-              SizedBox(height: 12),
-              SegmentedButton<String>(
-                showSelectedIcon: false,
-                segments: [
-                  ButtonSegment(value: 'cash', label: Text('Из кассы')),
-                  ButtonSegment(value: 'kaspi', label: Text('Kaspi')),
-                  ButtonSegment(value: 'other', label: Text('Другое')),
-                ],
-                selected: {method},
-                onSelectionChanged: (v) => setD(() => method = v.first),
-              ),
-              if (method == 'cash')
-                Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text('Сумма будет списана из кассы текущей смены как расход.',
-                      style: TextStyle(fontSize: 12)),
-                ),
-              SizedBox(height: 8),
-              TextField(controller: comment, decoration: InputDecoration(labelText: 'Комментарий')),
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: Text('Отмена')),
-            TextButton(onPressed: () => Navigator.pop(c, true), child: Text('Оплатить')),
-          ],
-        ),
-      ),
+    final r = await showPayDialog(
+      context,
+      title: 'Оплата поставщику: ${widget.debt.name}',
+      owed: _owed,
+      methods: [PayMethod.cash('Из кассы'), PayMethod.kaspi(), PayMethod.other()],
+      note: '«Из кассы» — сумма спишется из кассы текущей смены как расход.',
+      withComment: true,
     );
-    if (ok != true) return;
+    if (r == null) return;
     final err = await SupplierDebtService.instance.pay(
       widget.debt.supplierId,
       widget.debt.name,
-      parseNum(amount.text) ?? 0,
-      method,
-      comment: comment.text,
+      r.amount,
+      r.method,
+      comment: r.comment,
     );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err ?? 'Оплата записана')));

@@ -13,8 +13,19 @@ class Product {
   final String? comment;
   final double stock; // остаток (сумма остатков по партиям)
   final List<String> photos; // имена файлов фото
+  final String? categoryId; // группа (папка) товара
+  final double minStock; // минимальный остаток (для автозаявки и подсветки)
+  final bool active; // false — товар отключён (не продаётся, скрыт в продаже)
+
+  /// Все штрихкоды товара (у одного товара может быть несколько — через запятую).
+  List<String> get barcodes => splitBarcodes(barcode);
+
+  bool get low => active && minStock > 0 && stock <= minStock;
 
   Product({
+    this.categoryId,
+    this.minStock = 0,
+    this.active = true,
     this.id,
     required this.name,
     this.barcode,
@@ -26,6 +37,22 @@ class Product {
   });
 }
 
+/// «123, 456 ,789» → ['123','456','789'] (без пробелов и пустых).
+List<String> splitBarcodes(String? s) => (s ?? '')
+    .split(RegExp(r'[,;\s]+'))
+    .map((e) => e.trim())
+    .where((e) => e.isNotEmpty)
+    .toList();
+
+/// Штрихкод со сканера или с клавиатуры: убираем пробелы и переводы строк.
+String cleanBarcode(String s) => s.replaceAll(RegExp(r'\s'), '');
+
+class ProductGroup {
+  final String id;
+  final String name;
+  ProductGroup(this.id, this.name);
+}
+
 class ProductService {
   ProductService._();
   static final ProductService instance = ProductService._();
@@ -34,10 +61,12 @@ class ProductService {
 
   static const units = ['шт', 'кг', 'л', 'м', 'упак', 'компл'];
 
-  /// Список товаров с остатком и первым фото. query — часть названия или штрихкод.
-  Future<List<Product>> search([String query = '']) async {
+  /// Список товаров с остатком и первым фото. query — часть названия или штрихкода.
+  /// categoryId — только эта группа; onlyActive — без отключённых (для продажи).
+  Future<List<Product>> search([String query = '', String? categoryId, bool onlyActive = false]) async {
     final db = await AppDatabase.instance.db;
     final q = query.trim();
+    final cat = categoryId ?? '';
     final rows = await db.rawQuery('''
       SELECT p.*,
         COALESCE((SELECT SUM(b.qty_left) FROM batch_left b
@@ -47,9 +76,11 @@ class ProductService {
           ORDER BY ph.sort LIMIT 1) AS photo
       FROM products p
       WHERE p.deleted = 0
-        AND (? = '' OR p.name LIKE ? COLLATE NOCASE OR p.barcode = ?)
-      ORDER BY p.name COLLATE NOCASE
-    ''', [q, '%$q%', q]);
+        AND (? = '' OR p.name LIKE ? COLLATE NOCASE OR p.barcode LIKE ?)
+        AND (? = '' OR p.category_id = ?)
+        AND (? = 0 OR p.active = 1)
+      ORDER BY p.active DESC, p.name COLLATE NOCASE
+    ''', [q, '%$q%', '%${cleanBarcode(q)}%', cat, cat, onlyActive ? 1 : 0]);
     return rows
         .map((r) => Product(
               id: r['id'] as String,
@@ -60,15 +91,61 @@ class ProductService {
               comment: r['comment'] as String?,
               stock: (r['stock'] as num).toDouble(),
               photos: r['photo'] == null ? [] : [r['photo'] as String],
+              categoryId: r['category_id'] as String?,
+              minStock: ((r['min_stock'] as num?) ?? 0).toDouble(),
+              active: ((r['active'] as int?) ?? 1) == 1,
             ))
         .toList();
   }
 
-  /// Найти один товар по штрихкоду (для кассы).
+  // ---------- Группы (папки) товаров ----------
+
+  Future<List<ProductGroup>> categories() async {
+    final rows = await _repo.list('categories', orderBy: 'sort, name COLLATE NOCASE');
+    return rows.map((r) => ProductGroup(r['id'] as String, r['name'] as String)).toList();
+  }
+
+  Future<String> saveCategory(String name, {String? id}) =>
+      _repo.save('categories', {if (id != null) 'id': id, 'name': name.trim(), 'sort': 0});
+
+  /// Удалить группу: товары из неё становятся «без группы».
+  Future<void> deleteCategory(String id) async {
+    final db = await AppDatabase.instance.db;
+    final rows = await db.query('products', where: 'category_id = ? AND deleted = 0', whereArgs: [id]);
+    for (final r in rows) {
+      await _repo.save('products', {...r, 'category_id': null});
+    }
+    await _repo.remove('categories', id);
+  }
+
+  /// Привязать ещё один штрихкод к товару (например, второй код на упаковке).
+  Future<String?> addBarcode(String productId, String code) async {
+    final c = cleanBarcode(code);
+    if (c.isEmpty) return 'Пустой штрихкод';
+    if (await barcodeTaken(c, exceptId: productId)) return 'Штрихкод $c уже есть у другого товара';
+    final db = await AppDatabase.instance.db;
+    final rows = await db.query('products', where: 'id = ?', whereArgs: [productId]);
+    if (rows.isEmpty) return 'Товар не найден';
+    final list = splitBarcodes(rows.first['barcode'] as String?);
+    if (!list.contains(c)) list.add(c);
+    await _repo.save('products', {...rows.first, 'barcode': list.join(',')});
+    return null;
+  }
+
+  /// Найти один товар по штрихкоду (для кассы). Ищет среди всех штрихкодов товара.
   Future<Product?> byBarcode(String code) async {
-    final list = await search(code);
+    final c = cleanBarcode(code);
+    if (c.isEmpty) return null;
+    final list = await search(c);
     for (final p in list) {
-      if (p.barcode == code) return p;
+      if (p.barcodes.contains(c)) return p;
+    }
+    // Сканер мог вернуть код без ведущего нуля (UPC-A ↔ EAN-13) — пробуем оба варианта.
+    final alt = c.length == 12 ? '0$c' : (c.length == 13 && c.startsWith('0') ? c.substring(1) : null);
+    if (alt != null) {
+      for (final p in await search(alt)) {
+        if (p.barcodes.contains(alt)) return p;
+      }
     }
     return null;
   }
@@ -80,12 +157,20 @@ class ProductService {
     return rows.map((r) => r['file_name'] as String).toList();
   }
 
-  /// Штрихкод уже есть у другого товара?
-  Future<bool> barcodeTaken(String code, {String? exceptId}) async {
+  /// Штрихкод уже есть у другого товара? (проверяются все штрихкоды каждого товара)
+  Future<bool> barcodeTaken(String code, {String? exceptId}) async => (await barcodeOwner(code, exceptId: exceptId)) != null;
+
+  /// Название товара, у которого уже есть этот штрихкод (или null).
+  Future<String?> barcodeOwner(String code, {String? exceptId}) async {
+    final c = cleanBarcode(code);
+    if (c.isEmpty) return null;
     final rows = await _repo.list('products',
-        where: exceptId == null ? 'barcode = ?' : 'barcode = ? AND id <> ?',
-        args: exceptId == null ? [code] : [code, exceptId]);
-    return rows.isNotEmpty;
+        where: exceptId == null ? 'barcode LIKE ?' : 'barcode LIKE ? AND id <> ?',
+        args: exceptId == null ? ['%$c%'] : ['%$c%', exceptId]);
+    for (final r in rows) {
+      if (splitBarcodes(r['barcode'] as String?).contains(c)) return r['name'] as String;
+    }
+    return null;
   }
 
   /// Сохранить товар вместе со списком фото (порядок = порядок в списке).
@@ -99,7 +184,10 @@ class ProductService {
         {
           if (p.id != null) 'id': p.id,
           'name': p.name.trim(),
-          'barcode': (p.barcode?.trim().isEmpty ?? true) ? null : p.barcode!.trim(),
+          'barcode': p.barcodes.isEmpty ? null : p.barcodes.join(','),
+          'category_id': p.categoryId,
+          'min_stock': p.minStock,
+          'active': p.active ? 1 : 0,
           'unit': p.unit,
           'sale_price': p.salePrice,
           'comment': p.comment,

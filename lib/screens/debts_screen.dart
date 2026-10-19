@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../services/debt_service.dart';
 import '../ui/format.dart';
 import '../ui/glass.dart';
+import '../ui/pay_dialog.dart';
 import 'supplier_debts_screen.dart';
 
 class DebtsScreen extends StatefulWidget {
@@ -211,39 +212,14 @@ class _CustomerDebtScreenState extends State<CustomerDebtScreen> {
   double get _owed => _sales.fold(0, (s, x) => s + (x.remaining > 0 ? x.remaining : 0));
 
   Future<void> _pay() async {
-    final amount = TextEditingController(text: qtyText(_owed.roundToDouble()));
-    String method = 'cash';
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, setD) => AlertDialog(
-          title: Text('Принять оплату долга'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-              controller: amount,
-              autofocus: true,
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: 'Сумма, ₸ (долг ${money(_owed)})'),
-            ),
-            SizedBox(height: 12),
-            SegmentedButton<String>(
-              segments: [
-                ButtonSegment(value: 'cash', label: Text('Наличные')),
-                ButtonSegment(value: 'kaspi', label: Text('Kaspi')),
-              ],
-              selected: {method},
-              onSelectionChanged: (v) => setD(() => method = v.first),
-            ),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: Text('Отмена')),
-            TextButton(onPressed: () => Navigator.pop(c, true), child: Text('Принять')),
-          ],
-        ),
-      ),
+    final r = await showPayDialog(
+      context,
+      title: 'Оплата долга: ${widget.debt.name}',
+      owed: _owed,
+      methods: [PayMethod.cash(), PayMethod.kaspi()],
     );
-    if (ok != true) return;
-    final err = await DebtService.instance.pay(widget.debt.customerId, parseNum(amount.text) ?? 0, method);
+    if (r == null) return;
+    final err = await DebtService.instance.pay(widget.debt.customerId, r.amount, r.method);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err ?? 'Оплата принята')));
     _load();

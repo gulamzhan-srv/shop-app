@@ -17,8 +17,11 @@ class BarcodeScanScreen extends StatefulWidget {
 }
 
 class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
-  final _controller = MobileScannerController(detectionSpeed: DetectionSpeed.noDuplicates);
+  final _controller = MobileScannerController(detectionSpeed: DetectionSpeed.normal);
   bool _done = false;
+  // Код принимаем, только если он прочитан 2 раза подряд одинаково — так меньше ошибок чтения.
+  String? _last;
+  int _same = 0;
 
   @override
   void dispose() {
@@ -29,10 +32,18 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
   void _onDetect(BarcodeCapture c) {
     if (_done) return;
     for (final b in c.barcodes) {
-      final v = b.rawValue;
+      final v = b.rawValue?.replaceAll(RegExp(r'\s'), '');
       if (v != null && v.isNotEmpty) {
-        _done = true;
-        Navigator.of(context).pop(v);
+        if (v == _last) {
+          _same++;
+        } else {
+          _last = v;
+          _same = 1;
+        }
+        if (_same >= 2) {
+          _done = true;
+          Navigator.of(context).pop(v);
+        }
         return;
       }
     }

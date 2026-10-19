@@ -29,6 +29,10 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
   final _markup = TextEditingController(); // наценка, %
   double? _cost; // последняя цена закупки (из поступлений)
   final _comment = TextEditingController();
+  final _minStock = TextEditingController();
+  String? _categoryId;
+  List<ProductGroup> _cats = [];
+  bool _active = true;
   String _unit = 'шт';
   List<String> _photos = [];
   final Map<String, File> _files = {};
@@ -42,6 +46,9 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
   @override
   void initState() {
     super.initState();
+    ProductService.instance.categories().then((l) {
+      if (mounted) setState(() => _cats = l);
+    });
     final pid = widget.product?.id;
     if (pid != null) {
       AppDatabase.instance.db.then((db) => FifoService.instance.lastCost(db, pid)).then((c) {
@@ -57,6 +64,9 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
       _price.text = p.salePrice == 0 ? '' : _fmt(p.salePrice);
       _comment.text = p.comment ?? '';
       _unit = p.unit;
+      _categoryId = p.categoryId;
+      _active = p.active;
+      _minStock.text = p.minStock == 0 ? '' : _fmt(p.minStock);
       ProductService.instance.photosOf(p.id!).then((list) async {
         for (final n in list) {
           _files[n] = await PhotoService.instance.fileFor(n);
@@ -173,7 +183,35 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
 
   Future<void> _scan() async {
     final code = await BarcodeScanScreen.scan(context);
-    if (code != null) setState(() => _barcode.text = code);
+    if (code == null) return;
+    // Добавляем к уже введённым: у товара может быть несколько штрихкодов.
+    final list = splitBarcodes(_barcode.text);
+    if (!list.contains(code)) list.add(code);
+    setState(() => _barcode.text = list.join(', '));
+  }
+
+  Future<void> _newCategory() async {
+    final c = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: Text('Новая группа товаров'),
+        content: TextField(controller: c, autofocus: true, decoration: InputDecoration(labelText: 'Название группы')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(d, true), child: Text('Создать')),
+        ],
+      ),
+    );
+    if (ok != true || c.text.trim().isEmpty) return;
+    final id = await ProductService.instance.saveCategory(c.text);
+    final l = await ProductService.instance.categories();
+    if (mounted) {
+      setState(() {
+        _cats = l;
+        _categoryId = id;
+      });
+    }
   }
 
   Future<void> _save() async {
@@ -185,11 +223,14 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
     if (_cost != null && price + 0.001 < _cost!) {
       return setState(() => _error = 'Цена продажи ниже цены закупки (${_fmt(_cost!)} ₸)');
     }
-    final code = _barcode.text.trim();
-    if (code.isNotEmpty &&
-        await ProductService.instance.barcodeTaken(code, exceptId: widget.product?.id)) {
-      return setState(() => _error = 'Этот штрихкод уже есть у другого товара');
+    final codes = splitBarcodes(_barcode.text);
+    if (codes.toSet().length != codes.length) return setState(() => _error = 'Штрихкоды повторяются');
+    for (final c in codes) {
+      final owner = await ProductService.instance.barcodeOwner(c, exceptId: widget.product?.id);
+      if (owner != null) return setState(() => _error = 'Штрихкод $c уже есть у товара «$owner»');
     }
+    final code = codes.join(',');
+    final minStock = double.tryParse(_minStock.text.replaceAll(' ', '').replaceAll(',', '.')) ?? 0;
     setState(() => _busy = true);
     await ProductService.instance.save(Product(
       id: widget.product?.id,
@@ -199,6 +240,9 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
       salePrice: price,
       comment: _comment.text.trim().isEmpty ? null : _comment.text.trim(),
       photos: _photos,
+      categoryId: _categoryId,
+      minStock: minStock < 0 ? 0 : minStock,
+      active: _active,
     ));
     _saved = true;
     if (mounted) Navigator.of(context).pop(true);
@@ -301,7 +345,7 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
                 controller: _barcode,
                 enabled: _canEdit,
                 style: TextStyle(color: AppColors.text),
-                decoration: glassInput('Штрихкод',
+                decoration: glassInput('Штрихкоды (несколько — через запятую)',
                     suffix: _canEdit
                         ? IconButton(
                             onPressed: _scan,
@@ -341,6 +385,47 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
                 SizedBox(height: 12),
                 _priceWindow(),
               ],
+              SizedBox(height: 12),
+              Row(children: [
+                Expanded(
+                  child: DropdownButtonFormField<String?>(
+                    value: _cats.any((c) => c.id == _categoryId) ? _categoryId : null,
+                    isExpanded: true,
+                    dropdownColor: AppColors.sheet,
+                    style: TextStyle(color: AppColors.text, fontSize: 16),
+                    decoration: glassInput('Группа'),
+                    items: [
+                      DropdownMenuItem<String?>(value: null, child: Text('Без группы')),
+                      for (final c in _cats) DropdownMenuItem<String?>(value: c.id, child: Text(c.name)),
+                    ],
+                    onChanged: _canEdit ? (v) => setState(() => _categoryId = v) : null,
+                  ),
+                ),
+                if (_canEdit)
+                  IconButton(
+                    onPressed: _newCategory,
+                    icon: Icon(Icons.create_new_folder_outlined, color: AppColors.accent),
+                    tooltip: 'Новая группа',
+                  ),
+              ]),
+              SizedBox(height: 12),
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: _minStock,
+                    enabled: _canEdit,
+                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    style: TextStyle(color: AppColors.text),
+                    decoration: glassInput('Мин. остаток, $_unit'),
+                  ),
+                ),
+                SizedBox(width: 12),
+                Column(children: [
+                  Text(_active ? 'Продаётся' : 'Отключён',
+                      style: TextStyle(color: _active ? AppColors.accent : AppColors.danger, fontSize: 12)),
+                  Switch(value: _active, onChanged: _canEdit ? (v) => setState(() => _active = v) : null),
+                ]),
+              ]),
               SizedBox(height: 12),
               TextField(
                 controller: _comment,

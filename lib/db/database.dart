@@ -14,7 +14,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _dbName = 'shop.db';
-  static const _dbVersion = 6;
+  static const _dbVersion = 7;
 
   Database? _db;
 
@@ -184,6 +184,18 @@ class AppDatabase {
       'ALTER TABLE sales ADD COLUMN opening INTEGER NOT NULL DEFAULT 0',
       'ALTER TABLE receipts ADD COLUMN opening INTEGER NOT NULL DEFAULT 0',
     ],
+    7: [
+      // Группы (папки) товаров, минимальный остаток и отключение товара.
+      '''CREATE TABLE categories (
+        id TEXT PRIMARY KEY, updated_at INTEGER NOT NULL, device_id TEXT NOT NULL,
+        deleted INTEGER NOT NULL DEFAULT 0,
+        name TEXT NOT NULL,
+        sort INTEGER NOT NULL DEFAULT 0
+      )''',
+      'ALTER TABLE products ADD COLUMN category_id TEXT',
+      'ALTER TABLE products ADD COLUMN min_stock REAL NOT NULL DEFAULT 0',
+      'ALTER TABLE products ADD COLUMN active INTEGER NOT NULL DEFAULT 1',
+    ],
   };
 
   /// Таблицы с данными, которые синхронизируются между телефонами.
@@ -191,7 +203,7 @@ class AppDatabase {
     'employees', 'products', 'product_photos', 'suppliers', 'receipts', 'receipt_lines',
     'batches', 'shifts', 'customers', 'sales', 'sale_lines', 'sale_line_batches',
     'debt_payments', 'cash_ops', 'returns', 'return_lines', 'return_batches',
-    'settings', 'access_log', 'supplier_payments',
+    'settings', 'access_log', 'supplier_payments', 'categories',
   ];
 
   /// Общие служебные поля (вставляются в каждую таблицу).
