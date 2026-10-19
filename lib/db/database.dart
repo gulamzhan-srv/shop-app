@@ -14,7 +14,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _dbName = 'shop.db';
-  static const _dbVersion = 5;
+  static const _dbVersion = 6;
 
   Database? _db;
 
@@ -177,6 +177,12 @@ class AppDatabase {
       )''',
       'CREATE INDEX idx_suppay_supplier ON supplier_payments(supplier_id)',
       'CREATE INDEX idx_receipts_supplier ON receipts(supplier_id)',
+    ],
+    6: [
+      // Начальные остатки: opening = 1 — начальный долг покупателя (sales), начальный долг
+      // поставщику или начальный остаток склада (receipts). В выручку и поступления не входят.
+      'ALTER TABLE sales ADD COLUMN opening INTEGER NOT NULL DEFAULT 0',
+      'ALTER TABLE receipts ADD COLUMN opening INTEGER NOT NULL DEFAULT 0',
     ],
   };
 

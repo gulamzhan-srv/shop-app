@@ -29,13 +29,16 @@ class _LineEdit {
 
 class ReceiptEditScreen extends StatefulWidget {
   final String? receiptId; // null = новый документ
-  ReceiptEditScreen({super.key, this.receiptId});
+  /// Новый документ «Начальный остаток склада» (без поставщика и долга).
+  final bool opening;
+  ReceiptEditScreen({super.key, this.receiptId, this.opening = false});
   @override
   State<ReceiptEditScreen> createState() => _ReceiptEditScreenState();
 }
 
 class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
   DateTime _date = DateTime.now();
+  late bool _opening = widget.opening;
   String? _supplierId;
   List<Supplier> _suppliers = [];
   final _comment = TextEditingController();
@@ -70,6 +73,7 @@ class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
       _comment.text = r.comment ?? '';
       _author = r.authorName;
       _device = r.deviceName;
+      _opening = r.opening;
       if (r.debt > 0.5) {
         _onCredit = true;
         _paid.text = qtyText(r.paidSum);
@@ -208,7 +212,8 @@ class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
       date: _date,
       supplierId: _supplierId,
       comment: _comment.text,
-      paid: _onCredit ? (parseNum(_paid.text) ?? 0) : null,
+      opening: _opening,
+      paid: _onCredit && !_opening ? (parseNum(_paid.text) ?? 0) : null,
       dueDate: _onCredit ? _due : null,
       lines: [
         for (final l in _lines)
@@ -301,7 +306,7 @@ class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
       body: GlassBackground(
         child: Column(children: [
           GlassHeader(
-            title: isNew ? 'Новое поступление' : 'Поступление',
+            title: _opening ? 'Начальный остаток' : (isNew ? 'Новое поступление' : 'Поступление'),
             actions: [
               if (!isNew && !_readOnly)
                 IconButton(
@@ -342,7 +347,7 @@ class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
                   ),
                 ]),
                 SizedBox(height: 12),
-                Row(children: [
+                if (!_opening) Row(children: [
                   Expanded(
                     child: DropdownButtonFormField<String?>(
                       value: _suppliers.any((s) => s.id == _supplierId) ? _supplierId : null,
@@ -402,7 +407,7 @@ class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
                         style: TextStyle(color: AppColors.text, fontSize: 22, fontWeight: FontWeight.w800)),
                   ]),
                 ),
-                if (!_hidePrices) ...[
+                if (!_hidePrices && !_opening) ...[
                   SizedBox(height: 12),
                   _paymentCard(),
                 ],

@@ -20,6 +20,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
@@ -54,6 +55,37 @@ class SyncService {
   String? _lastError;
   final Map<String, Set<String>> _columns = {};
 
+  /// Ход синхронизации для полосы прогресса: 0…1, null — сейчас не идёт.
+  final progress = ValueNotifier<double?>(null);
+  /// Что сейчас делается (текст под полосой прогресса).
+  final stage = ValueNotifier<String>('');
+
+  void _step(double p, String text) {
+    progress.value = p;
+    stage.value = text;
+  }
+
+  /// Пакет и SHA-1 этого приложения — их нужно указать в Google Cloud (OAuth-клиент Android).
+  static const packageName = 'kz.grs.shop_app';
+  static const sha1 = '6A:8E:33:CE:D5:A2:21:15:17:2B:B5:38:6D:AC:C6:F4:37:04:2A:98';
+
+  /// Понятный текст ошибки входа в Google.
+  static String explainSignInError(Object e) {
+    final t = e.toString();
+    if (t.contains('10:') || t.contains('DEVELOPER_ERROR')) {
+      return 'Google не знает это приложение (ошибка 10). В Google Cloud → Credentials создайте '
+          'OAuth-клиент типа Android: пакет $packageName, SHA-1 $sha1. Включите Google Drive API, '
+          'на экране согласия добавьте свою почту в тестовые пользователи. Через 5–10 минут повторите.';
+    }
+    if (t.contains('12501') || t.contains('sign_in_canceled')) return 'Вход отменён';
+    if (t.contains('network') || t.contains('7:')) return 'Нет интернета';
+    if (t.contains('access_denied') || t.contains('12500')) {
+      return 'Google отказал во входе. Проверьте, что эта почта добавлена в тестовые пользователи '
+          '(Google Cloud → экран согласия → Test users).';
+    }
+    return 'Не удалось войти: $t';
+  }
+
   /// Запуск: тихий вход (если уже входили) и синхронизация каждые 3 минуты.
   Future<void> start() async {
     Repo.onChange = scheduleSoon;
@@ -74,11 +106,30 @@ class SyncService {
       if (acc == null) return 'Вход отменён';
       return null;
     } catch (e) {
-      return 'Не удалось войти: $e';
+      return explainSignInError(e);
     }
   }
 
   Future<void> signOut() => _gsi.signOut();
+
+  /// Есть ли на Google Диске этого аккаунта данные магазина (резервная копия).
+  /// null — проверить не удалось (нет интернета и т.п.).
+  Future<bool?> hasBackup() async {
+    try {
+      final client = await _gsi.authenticatedClient();
+      if (client == null) return null;
+      final api = drive.DriveApi(client);
+      final res = await api.files.list(
+        spaces: 'appDataFolder',
+        q: "name contains 'chg_'",
+        pageSize: 1,
+        $fields: 'files(id)',
+      );
+      return (res.files ?? []).isNotEmpty;
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// После изменения в базе — синхронизировать через несколько секунд
   /// (чтобы несколько изменений подряд ушли одним файлом).
@@ -107,14 +158,21 @@ class SyncService {
     try {
       do {
         _again = false;
+        _step(0.03, 'Подключение к Google…');
         final client = await _gsi.authenticatedClient();
         if (client == null) return _lastError = 'нет доступа к Google Диску';
         final api = drive.DriveApi(client);
+        _step(0.1, 'Отправка изменений…');
         await _push(api);
-        final changed = await _pull(api);
+        _step(0.3, 'Получение данных…');
+        final newSales = <String>[];
+        final changed = await _pull(api, newSales);
+        _step(0.85, 'Фото товаров…');
         await _uploadPhotos(api);
         await _downloadPhotos(api);
         if (changed) await NotificationService.instance.rescheduleDebts();
+        if (newSales.isNotEmpty) await NotificationService.instance.notifySales(newSales);
+        _step(1, 'Готово');
         final p = await SharedPreferences.getInstance();
         await p.setInt('last_sync', DateTime.now().millisecondsSinceEpoch);
         // Для журнала администратора: когда этот телефон последний раз синхронизировался.
@@ -131,6 +189,7 @@ class SyncService {
       return _lastError = '$e';
     } finally {
       _running = false;
+      progress.value = null;
     }
   }
 
@@ -222,7 +281,7 @@ class SyncService {
   }
 
   /// Возвращает true, если что-то изменилось.
-  Future<bool> _pull(drive.DriveApi api) async {
+  Future<bool> _pull(drive.DriveApi api, List<String> newSales) async {
     final db = await AppDatabase.instance.db;
     final device = await _repo.deviceId();
     final applied = {
@@ -238,7 +297,10 @@ class SyncService {
       await _localColumns(db, t);
     }
     var changed = false;
+    var done = 0;
     for (final f in files) {
+      done++;
+      _step(0.3 + 0.55 * done / files.length, 'Получение данных: $done из ${files.length}…');
       final data = jsonDecode(utf8.decode(await _download(api, f.id!))) as Map<String, dynamic>;
       final rows = (data['rows'] as List).cast<Map<String, dynamic>>();
       await db.transaction((txn) async {
@@ -250,6 +312,7 @@ class SyncService {
           final id = r['id'] as String?;
           if (id == null) continue;
           final local = await txn.query(table, columns: ['updated_at', 'device_id'], where: 'id = ?', whereArgs: [id]);
+          if (local.isEmpty && table == 'sales' && r['deleted'] == 0) newSales.add(id);
           if (local.isNotEmpty) {
             final lu = local.first['updated_at'] as int;
             final ru = (r['updated_at'] as num).toInt();

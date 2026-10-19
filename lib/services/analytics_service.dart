@@ -136,7 +136,7 @@ class AnalyticsService {
 
   /// Выручка за диапазон (продажи − подтверждённые возвраты).
   Future<double> revenue(Range r) async {
-    final s = await _one('SELECT SUM(total) FROM sales WHERE deleted = 0 AND sale_date >= ? AND sale_date < ?', [r.a, r.b]);
+    final s = await _one('SELECT SUM(total) FROM sales WHERE deleted = 0 AND opening = 0 AND sale_date >= ? AND sale_date < ?', [r.a, r.b]);
     final ret = await _one(
         "SELECT SUM(refund) FROM returns WHERE deleted = 0 AND status = 'approved' AND approved_at >= ? AND approved_at < ?",
         [r.a, r.b]);
@@ -147,7 +147,7 @@ class AnalyticsService {
   Future<double> profit(Range r) async {
     final rev = await revenue(r);
     final cost = await _one(
-        'SELECT SUM(cost_total) FROM sales WHERE deleted = 0 AND sale_date >= ? AND sale_date < ?', [r.a, r.b]);
+        'SELECT SUM(cost_total) FROM sales WHERE deleted = 0 AND opening = 0 AND sale_date >= ? AND sale_date < ?', [r.a, r.b]);
     final backToStock = await _one('''
       SELECT SUM(rb.qty * b.cost_price) FROM return_batches rb
       JOIN batches b ON b.id = rb.batch_id
@@ -168,7 +168,7 @@ class AnalyticsService {
       final (cur, _) = ranges(p);
       final rows = await db.rawQuery('''
         SELECT strftime('%Y-%m', sale_date / 1000, 'unixepoch', 'localtime') AS k, SUM(total) AS v
-        FROM sales WHERE deleted = 0 AND sale_date >= ? AND sale_date < ? GROUP BY k''', [cur.a, cur.b]);
+        FROM sales WHERE deleted = 0 AND opening = 0 AND sale_date >= ? AND sale_date < ? GROUP BY k''', [cur.a, cur.b]);
       final map = {for (final r in rows) r['k'] as String: (r['v'] as num).toDouble()};
       final out = <Bar>[];
       for (var m = DateTime(cur.from.year, cur.from.month);
@@ -196,7 +196,7 @@ class AnalyticsService {
     final to = from.add(Duration(days: days));
     final rows = await db.rawQuery('''
       SELECT strftime('%Y-%m-%d', sale_date / 1000, 'unixepoch', 'localtime') AS k, SUM(total) AS v
-      FROM sales WHERE deleted = 0 AND sale_date >= ? AND sale_date < ? GROUP BY k''',
+      FROM sales WHERE deleted = 0 AND opening = 0 AND sale_date >= ? AND sale_date < ? GROUP BY k''',
         [from.millisecondsSinceEpoch, to.millisecondsSinceEpoch]);
     final map = {for (final r in rows) r['k'] as String: (r['v'] as num).toDouble()};
     final out = <Bar>[];
@@ -233,7 +233,7 @@ class AnalyticsService {
     final prevProf = await profit(prev);
 
     final rec = await db.rawQuery(
-        'SELECT COALESCE(SUM(total),0) AS s, COUNT(*) AS c FROM receipts WHERE deleted = 0 AND doc_date >= ? AND doc_date < ?',
+        'SELECT COALESCE(SUM(total),0) AS s, COUNT(*) AS c FROM receipts WHERE deleted = 0 AND opening = 0 AND doc_date >= ? AND doc_date < ?',
         [cur.a, cur.b]);
     final out = await db.rawQuery(
         "SELECT COALESCE(SUM(amount),0) AS s, COUNT(*) AS c FROM cash_ops WHERE deleted = 0 AND kind = 'out' AND op_date >= ? AND op_date < ?",

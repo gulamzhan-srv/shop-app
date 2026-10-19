@@ -1,6 +1,7 @@
 // Google Диск: вход, состояние синхронизации, «Синхронизировать сейчас».
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/sync_service.dart';
 import '../ui/format.dart';
@@ -88,6 +89,12 @@ class _SyncScreenState extends State<SyncScreen> {
                         style: TextStyle(color: AppColors.textDim, height: 1.4),
                       ),
                     ),
+                    SizedBox(height: 10),
+                    SyncProgressBar(),
+                    if (!signed) ...[
+                      SizedBox(height: 10),
+                      GoogleSetupHint(),
+                    ],
                     SizedBox(height: 18),
                     if (!signed)
                       AccentButton(
@@ -119,6 +126,92 @@ class _SyncScreenState extends State<SyncScreen> {
           ),
         ]),
       ),
+    );
+  }
+}
+
+/// Полоса прогресса синхронизации (проценты и текущий шаг). Пока синхронизации нет — пусто.
+class SyncProgressBar extends StatelessWidget {
+  SyncProgressBar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<double?>(
+      valueListenable: SyncService.instance.progress,
+      builder: (_, p, __) {
+        if (p == null) return SizedBox.shrink();
+        return GlassCard(
+          radius: 14,
+          padding: EdgeInsets.fromLTRB(12, 10, 12, 12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(
+                child: ValueListenableBuilder<String>(
+                  valueListenable: SyncService.instance.stage,
+                  builder: (_, t, __) =>
+                      Text(t, style: TextStyle(color: AppColors.text, fontSize: 13)),
+                ),
+              ),
+              Text('${(p * 100).round()}%',
+                  style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800)),
+            ]),
+            SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: p,
+                minHeight: 8,
+                color: AppColors.accent,
+                backgroundColor: AppColors.overlay(0.12),
+              ),
+            ),
+          ]),
+        );
+      },
+    );
+  }
+}
+
+/// Подсказка для разовой настройки Google Cloud (пакет и SHA-1 с кнопкой «копировать»).
+class GoogleSetupHint extends StatelessWidget {
+  GoogleSetupHint({super.key});
+
+  Widget _row(BuildContext context, String label, String value) => Padding(
+        padding: EdgeInsets.only(top: 6),
+        child: Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: TextStyle(color: AppColors.textDim, fontSize: 11)),
+              SelectableText(value,
+                  style: TextStyle(color: AppColors.text, fontSize: 12, fontWeight: FontWeight.w700)),
+            ]),
+          ),
+          IconButton(
+            tooltip: 'Копировать',
+            icon: Icon(Icons.copy, size: 18, color: AppColors.accent),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: value));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Скопировано')));
+            },
+          ),
+        ]),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      radius: 14,
+      padding: EdgeInsets.fromLTRB(12, 10, 4, 6),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Если вход выдаёт «ошибка 10»',
+            style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w800, fontSize: 13)),
+        SizedBox(height: 2),
+        Text('В Google Cloud → APIs & Services → Credentials создайте OAuth client ID типа Android '
+            'с этими данными (один раз):',
+            style: TextStyle(color: AppColors.textDim, fontSize: 12)),
+        _row(context, 'Package name', SyncService.packageName),
+        _row(context, 'SHA-1', SyncService.sha1),
+      ]),
     );
   }
 }

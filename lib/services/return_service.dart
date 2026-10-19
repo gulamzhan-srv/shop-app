@@ -64,7 +64,7 @@ class ReturnService {
     final rows = await db.rawQuery('''
       SELECT s.id, s.sale_date, s.payment, s.total, c.name AS customer
       FROM sales s LEFT JOIN customers c ON c.id = s.customer_id
-      WHERE s.deleted = 0 AND s.sale_date >= ?
+      WHERE s.deleted = 0 AND s.opening = 0 AND s.sale_date >= ?
       ORDER BY s.sale_date DESC LIMIT 300''', [from]);
     return rows
         .map((r) => SaleBrief(

@@ -10,6 +10,8 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 
 import '../db/database.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../db/repo.dart';
 import 'device_service.dart';
 
@@ -122,6 +124,8 @@ class AuthService {
         if (remember) {
           current = e;
           logEvent('Вход');
+          // Уведомления о продажах приходят на телефон, где работает хозяин / администратор.
+          SharedPreferences.getInstance().then((p) => p.setBool('last_manager', e.isManager));
         }
         return e;
       }

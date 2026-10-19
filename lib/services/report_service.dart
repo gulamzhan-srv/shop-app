@@ -133,7 +133,7 @@ class ReportService {
   Future<List<CheckRow>> checks(DateTime from, DateTime to) async {
     final db = await AppDatabase.instance.db;
     final rows = await db.rawQuery(
-        '$_checkSelect WHERE s.deleted = 0 AND s.sale_date >= ? AND s.sale_date < ? ORDER BY s.sale_date DESC',
+        '$_checkSelect WHERE s.deleted = 0 AND s.opening = 0 AND s.sale_date >= ? AND s.sale_date < ? ORDER BY s.sale_date DESC',
         [from.millisecondsSinceEpoch, to.millisecondsSinceEpoch]);
     return rows.map(_check).toList();
   }
@@ -173,7 +173,7 @@ class ReportService {
                         AND r.status = 'approved' AND r.refund_payment = 'debt'), 0)), 0)
           FROM sales d WHERE d.customer_id = c.id AND d.deleted = 0 AND d.payment = 'debt') AS owed
       FROM customers c
-      JOIN sales s ON s.customer_id = c.id AND s.deleted = 0 AND s.sale_date >= ? AND s.sale_date < ?
+      JOIN sales s ON s.customer_id = c.id AND s.deleted = 0 AND s.opening = 0 AND s.sale_date >= ? AND s.sale_date < ?
       WHERE c.deleted = 0
       GROUP BY c.id
       ORDER BY sm DESC''', [from.millisecondsSinceEpoch, to.millisecondsSinceEpoch]);

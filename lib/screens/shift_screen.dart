@@ -148,7 +148,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
     return Scaffold(
       body: GlassBackground(
         child: Column(children: [
-          GlassHeader(title: 'Смена'),
+          GlassHeader(title: 'Касса · смена'),
           Expanded(
             child: _loading
                 ? Center(child: CircularProgressIndicator())

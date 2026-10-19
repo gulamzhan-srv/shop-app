@@ -42,7 +42,10 @@ class Receipt {
   final double? paid;
   /// До какого числа оплатить остаток (если взято в долг).
   final DateTime? dueDate;
+  /// Документ «Начальный остаток склада» (не входит в поступления за период).
+  final bool opening;
   Receipt({
+    this.opening = false,
     this.paid,
     this.dueDate,
     this.id,
@@ -89,7 +92,8 @@ class ReceiptService {
     return _deviceName = 'Телефон';
   }
 
-  Future<List<ReceiptRow>> list() async {
+  /// Список поступлений. opening = true — документы «Начальный остаток склада».
+  Future<List<ReceiptRow>> list({bool opening = false}) async {
     final db = await AppDatabase.instance.db;
     final rows = await db.rawQuery('''
       SELECT r.id, r.doc_date, r.total,
@@ -99,9 +103,9 @@ class ReceiptService {
       FROM receipts r
       LEFT JOIN suppliers s ON s.id = r.supplier_id
       LEFT JOIN employees e ON e.id = r.author_id
-      WHERE r.deleted = 0
+      WHERE r.deleted = 0 AND r.opening = ?
       ORDER BY r.doc_date DESC
-    ''');
+    ''', [opening ? 1 : 0]);
     return rows
         .map((r) => ReceiptRow(
               r['id'] as String,
@@ -136,6 +140,7 @@ class ReceiptService {
       authorName: h['author_name'] as String?,
       deviceName: h['device_name'] as String?,
       paid: (h['paid'] as num?)?.toDouble(),
+      opening: (h['opening'] as int? ?? 0) == 1,
       dueDate: h['due_date'] == null ? null : DateTime.fromMillisecondsSinceEpoch(h['due_date'] as int),
       lines: lines
           .map((l) => ReceiptLine(
@@ -192,6 +197,7 @@ class ReceiptService {
           'device_name': device,
           'total': rc.total,
           'paid': rc.paidSum,
+          'opening': rc.opening ? 1 : 0,
           'due_date': rc.debt > 0.5 ? rc.dueDate?.millisecondsSinceEpoch : null,
         },
         txn: txn,

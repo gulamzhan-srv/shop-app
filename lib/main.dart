@@ -19,7 +19,7 @@ final _bootStatus = ValueNotifier<String>('Запуск…');
 bool _appStarted = false;
 
 /// Метка версии: видна на экране загрузки и на экране ошибки.
-const _buildTag = 'версия 19.10-4';
+const _buildTag = 'версия 19.10-5';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,7 +38,7 @@ Future<void> main() async {
     _bootStatus.value = 'Шаг 2 из 4: открываю базу…';
     await AppDatabase.instance.db; // открываем (или создаём) базу
     _bootStatus.value = 'Шаг 3 из 4: тема оформления…';
-    await AppThemes.load(); // сохранённая тема: Ночь / День / Красная / Зелёная
+    await AppThemes.load(); // сохранённая тема: Ночь / День / Рубин / Зумруд
     _bootStatus.value = 'Шаг 4 из 4: сотрудники…';
     final hasOwner = await AuthService.instance.hasOwner();
     _appStarted = true;

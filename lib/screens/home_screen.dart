@@ -15,13 +15,15 @@ import 'debts_screen.dart';
 import 'employees_screen.dart';
 import 'journal_screen.dart';
 import 'kassa_screen.dart';
+import 'opening_screen.dart';
+import 'sale_screen.dart';
 import 'pin_screen.dart';
 import 'products_screen.dart';
 import 'receipts_screen.dart';
 import 'reports_screen.dart';
 import 'returns_screen.dart';
 import 'supplier_debts_screen.dart';
-import 'sync_screen.dart';
+import 'sync_screen.dart' show SyncScreen, SyncProgressBar;
 
 class HomeScreen extends StatefulWidget {
   HomeScreen({super.key});
@@ -185,6 +187,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final monthYear = _cap(DateFormat('LLLL yyyy', 'ru').format(now));
 
     final menu = [
+      _menu(Icons.shopping_cart_outlined, 'Продажа', SaleScreen()),
       _menu(Icons.point_of_sale_outlined, 'Касса', KassaScreen()),
       _menu(Icons.inventory_2_outlined, 'Товары', ProductsScreen()),
       _menu(Icons.local_shipping_outlined, 'Поступления', ReceiptsScreen()),
@@ -194,6 +197,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _menu(Icons.receipt_long_outlined, 'Чеки', ChecksScreen()),
       if (owner) _menu(Icons.bar_chart_outlined, 'Отчёты', ReportsScreen()),
       if (owner) _menu(Icons.badge_outlined, 'Сотрудники', EmployeesScreen()),
+      if (owner) _menu(Icons.playlist_add_check_outlined, 'Начальные остатки', OpeningScreen()),
       // Google Диск и аккаунт хранения видят только хозяин и администратор.
       if (owner) _menu(Icons.cloud_sync_outlined, 'Google Диск', SyncScreen()),
       if (user?.isAdmin ?? false) _menu(Icons.manage_search_outlined, 'Журнал', JournalScreen()),
@@ -248,6 +252,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ]),
             ),
             SizedBox(height: 8),
+            SyncProgressBar(),
 
             Text('${user?.name ?? ''} · ${user == null ? '' : roleName(user.role).toLowerCase()}',
                 style: TextStyle(color: AppColors.textDim, fontSize: 13)),
