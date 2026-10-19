@@ -59,6 +59,8 @@ class SyncService {
   final progress = ValueNotifier<double?>(null);
   /// Что сейчас делается (текст под полосой прогресса).
   final stage = ValueNotifier<String>('');
+  /// Увеличивается, когда с других телефонов пришли изменения — экраны могут обновиться.
+  final dataChanged = ValueNotifier<int>(0);
 
   void _step(double p, String text) {
     progress.value = p;
@@ -92,7 +94,8 @@ class SyncService {
     try {
       await _gsi.signInSilently();
     } catch (_) {}
-    _periodic ??= Timer.periodic(Duration(minutes: 3), (_) => syncNow());
+    // Пока приложение открыто — проверяем изменения других телефонов каждые 30 секунд.
+    _periodic ??= Timer.periodic(Duration(seconds: 30), (_) => syncNow());
     unawaited(syncNow());
   }
 
@@ -104,13 +107,18 @@ class SyncService {
     try {
       final acc = await _gsi.signIn();
       if (acc == null) return 'Вход отменён';
+      // Новый вход — при первой синхронизации читаем все файлы аккаунта целиком.
+      (await SharedPreferences.getInstance()).remove('last_pull');
       return null;
     } catch (e) {
       return explainSignInError(e);
     }
   }
 
-  Future<void> signOut() => _gsi.signOut();
+  Future<void> signOut() async {
+    await _gsi.signOut();
+    (await SharedPreferences.getInstance()).remove('last_pull');
+  }
 
   /// Есть ли на Google Диске этого аккаунта данные магазина (резервная копия).
   /// null — проверить не удалось (нет интернета и т.п.).
@@ -135,7 +143,7 @@ class SyncService {
   /// (чтобы несколько изменений подряд ушли одним файлом).
   void scheduleSoon() {
     _debounce?.cancel();
-    _debounce = Timer(Duration(seconds: 8), () => syncNow());
+    _debounce = Timer(Duration(seconds: 3), () => syncNow());
   }
 
   Future<SyncStatus> status() async {
@@ -170,8 +178,18 @@ class SyncService {
         _step(0.85, 'Фото товаров…');
         await _uploadPhotos(api);
         await _downloadPhotos(api);
-        if (changed) await NotificationService.instance.rescheduleDebts();
-        if (newSales.isNotEmpty) await NotificationService.instance.notifySales(newSales);
+        // Уведомления не должны ломать синхронизацию: ошибки в них пропускаем.
+        if (changed) {
+          try {
+            await NotificationService.instance.rescheduleDebts();
+          } catch (_) {}
+          dataChanged.value++;
+        }
+        if (newSales.isNotEmpty) {
+          try {
+            await NotificationService.instance.notifySales(newSales);
+          } catch (_) {}
+        }
         _step(1, 'Готово');
         final p = await SharedPreferences.getInstance();
         await p.setInt('last_sync', DateTime.now().millisecondsSinceEpoch);
@@ -287,7 +305,17 @@ class SyncService {
     final applied = {
       for (final r in await db.query('sync_applied', columns: ['file_name'])) r['file_name'] as String
     };
-    final files = (await _listFiles(api, "name contains 'chg_'"))
+    // Берём только недавние файлы (с запасом 2 часа на разницу часов телефонов) —
+    // уже применённые всё равно отсеиваются. Так запрос остаётся быстрым и дешёвым.
+    final prefs = await SharedPreferences.getInstance();
+    final lastPull = prefs.getInt('last_pull');
+    final startedAt = DateTime.now().toUtc();
+    var q = "name contains 'chg_'";
+    if (lastPull != null) {
+      final from = DateTime.fromMillisecondsSinceEpoch(lastPull, isUtc: true).subtract(Duration(hours: 2));
+      q += " and createdTime > '${from.toIso8601String().split('.').first}'";
+    }
+    final files = (await _listFiles(api, q))
         .where((f) => f.name != null && !applied.contains(f.name) && !f.name!.contains(device))
         .toList()
       ..sort((a, b) => a.name!.compareTo(b.name!));
@@ -327,6 +355,7 @@ class SyncService {
             conflictAlgorithm: ConflictAlgorithm.replace);
       });
     }
+    await prefs.setInt('last_pull', startedAt.millisecondsSinceEpoch);
     return changed;
   }
 

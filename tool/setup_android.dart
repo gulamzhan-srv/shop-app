@@ -31,6 +31,7 @@ void main() {
   }
   _setupSigning(kotlin: kts.existsSync(), gradle: kts.existsSync() ? kts : groovy);
   _copyIcons();
+  _proguard();
   stdout.writeln('\nГотово. Теперь: flutter pub get  и  flutter run');
 }
 
@@ -180,4 +181,19 @@ void _patchGradle(File f, {required bool kotlin}) {
   }
   f.writeAsStringSync(s);
   stdout.writeln('✓ ${f.path}');
+}
+
+/// Правила для оптимизатора R8 (финальная сборка): без них модуль уведомлений
+/// падает с ошибкой «Missing type parameter» (вырезаются данные Gson TypeToken).
+void _proguard() {
+  File('android/app/proguard-rules.pro').writeAsStringSync('''
+-keepattributes Signature
+-keepattributes *Annotation*
+-keep class com.dexterous.** { *; }
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken
+-keep class com.google.gson.** { *; }
+-dontwarn com.google.gson.**
+''');
+  stdout.writeln('✓ proguard-rules.pro для уведомлений');
 }

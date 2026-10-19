@@ -116,8 +116,13 @@ class NotificationService {
   Future<void> rescheduleDebts() async {
     if (!_ready) await init();
     // Снимаем только запланированные напоминания (уведомления о продажах не трогаем).
-    for (final r in await _plugin.pendingNotificationRequests()) {
-      await _plugin.cancel(r.id);
+    try {
+      for (final r in await _plugin.pendingNotificationRequests()) {
+        await _plugin.cancel(r.id);
+      }
+    } catch (_) {
+      // На некоторых сборках список запланированных недоступен — снимаем все разом.
+      await _plugin.cancelAll();
     }
 
     final db = await AppDatabase.instance.db;

@@ -58,6 +58,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    SyncService.instance.dataChanged.addListener(_onRemoteData);
     RatesService.instance.cached().then((r) {
       if (mounted) setState(() => _rates = r);
     });
@@ -67,7 +68,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    SyncService.instance.dataChanged.removeListener(_onRemoteData);
     super.dispose();
+  }
+
+  /// С других телефонов пришли изменения — сразу обновляем цифры на экране.
+  void _onRemoteData() {
+    _analytics.currentState?.reload();
+    if (mounted) setState(() {});
   }
 
   @override
