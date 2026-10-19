@@ -33,7 +33,7 @@ class AppPalette {
   bool get dark => brightness == Brightness.dark;
 }
 
-/// Темы приложения: Ночь, День, Красная (в цветах Kaspi), Зелёная (в цветах Halyk).
+/// Темы приложения: Ночь, День, Рубин (красная), Зумруд (зелёная).
 class AppThemes {
   static final night = AppPalette(
     id: 'night', name: 'Ночь', brightness: Brightness.dark,
@@ -50,14 +50,14 @@ class AppThemes {
     blob1: Color(0xFF5EEAD4), blob2: Color(0xFFFCD34D), sheet: Color(0xFFFFFFFF), blobOpacity: 0.35,
   );
   static final kaspi = AppPalette(
-    id: 'kaspi', name: 'Красная (Kaspi)', brightness: Brightness.light,
+    id: 'kaspi', name: 'Рубин', brightness: Brightness.light,
     bg: Color(0xFFF7F7F8), text: Color(0xFF1A1A1A), textDim: Color(0xB31A1A1A),
     accent: Color(0xFFF14635), onAccent: Color(0xFFFFFFFF),
     warn: Color(0xFFB45309), amber: Color(0xFFF59E0B), danger: Color(0xFFC81E1E),
     blob1: Color(0xFFF14635), blob2: Color(0xFFFFB4A8), sheet: Color(0xFFFFFFFF), blobOpacity: 0.18,
   );
   static final halyk = AppPalette(
-    id: 'halyk', name: 'Зелёная (Halyk)', brightness: Brightness.light,
+    id: 'halyk', name: 'Зумруд', brightness: Brightness.light,
     bg: Color(0xFFF3F7F4), text: Color(0xFF14231B), textDim: Color(0xB314231B),
     accent: Color(0xFF0B7A55), onAccent: Color(0xFFFFFFFF),
     warn: Color(0xFFB45309), amber: Color(0xFFF2B705), danger: Color(0xFFDC2626),
