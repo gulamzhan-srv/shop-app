@@ -121,6 +121,9 @@ void _patchManifest(File f) {
     'android.permission.POST_NOTIFICATIONS',
     'android.permission.RECEIVE_BOOT_COMPLETED',
     'android.permission.VIBRATE',
+    // Координаты входа для журнала администратора (по разрешению пользователя).
+    'android.permission.ACCESS_COARSE_LOCATION',
+    'android.permission.ACCESS_FINE_LOCATION',
   ];
   final add = StringBuffer();
   for (final p in perms) {

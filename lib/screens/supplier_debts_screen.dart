@@ -4,6 +4,9 @@
 import 'package:flutter/material.dart';
 
 import '../db/database.dart';
+import '../services/auth_service.dart';
+import '../services/print_service.dart';
+import '../services/supplier_service.dart';
 import '../services/supplier_debt_service.dart';
 import '../ui/format.dart';
 import '../ui/glass.dart';
@@ -36,7 +39,7 @@ class _SupplierDebtsScreenState extends State<SupplierDebtsScreen> {
       final sup = await db.rawQuery('''
         SELECT s.id, s.name, s.phone,
           (SELECT MAX(r.doc_date) FROM receipts r WHERE r.supplier_id = s.id AND r.deleted = 0) AS last
-        FROM suppliers s WHERE s.deleted = 0
+        FROM suppliers s WHERE s.deleted = 0 AND s.active = 1
         ORDER BY s.name COLLATE NOCASE''');
       for (final r in sup) {
         final id = r['id'] as String;
@@ -249,6 +252,35 @@ class _SupplierDebtScreenState extends State<SupplierDebtScreen> {
 
   double get _owed => _docs.fold(0, (s, x) => s + x.remaining);
 
+  /// Удалить поставщика (если есть в документах — будет отключён).
+  Future<void> _delete() async {
+    final ok = await showGlassDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Удалить «${widget.debt.name}»?'),
+        content: Text('Если поставщик уже есть в документах, он не удалится, а будет отключён.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: Text('Удалить')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final msg = await SupplierService.instance.removeOrDisable(widget.debt.supplierId, owed: _owed);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    if (!msg.startsWith('Нельзя')) Navigator.of(context).pop();
+  }
+
+  /// Акт сверки с поставщиком: поступления в долг и наши оплаты.
+  Future<void> _statement() async {
+    final rows = <StatementRow>[
+      for (final d in _docs) StatementRow(d.date, 'Поступление на ${money(d.total)} (в долг)', d.debt, 0),
+      for (final p in _pays) StatementRow(p.at, 'Оплата (${supplierPaymentName(p.payment)})', 0, p.amount),
+    ];
+    await PrintService.instance.statement(context, name: widget.debt.name, supplier: true, rows: rows);
+  }
+
   Future<void> _pay() async {
     final r = await showPayDialog(
       context,
@@ -276,7 +308,19 @@ class _SupplierDebtScreenState extends State<SupplierDebtScreen> {
     return Scaffold(
       body: GlassBackground(
         child: Column(children: [
-          GlassHeader(title: widget.debt.name),
+          GlassHeader(title: widget.debt.name, actions: [
+            if (AuthService.instance.current?.isManager ?? false)
+              IconButton(
+                onPressed: _delete,
+                icon: Icon(Icons.delete_outline, color: AppColors.text),
+                tooltip: 'Удалить поставщика',
+              ),
+            IconButton(
+              onPressed: _statement,
+              icon: Icon(Icons.picture_as_pdf_outlined, color: AppColors.text),
+              tooltip: 'Акт сверки (PDF)',
+            ),
+          ]),
           Expanded(
             child: ListView(padding: EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
               GlassCard(

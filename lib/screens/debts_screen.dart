@@ -3,7 +3,10 @@
 
 import 'package:flutter/material.dart';
 
+import '../db/database.dart';
 import '../services/auth_service.dart';
+import '../services/print_service.dart';
+import '../services/customer_service.dart';
 import '../services/debt_service.dart';
 import '../ui/format.dart';
 import '../ui/glass.dart';
@@ -209,6 +212,43 @@ class _CustomerDebtScreenState extends State<CustomerDebtScreen> {
     if (mounted) setState(() => _sales = l);
   }
 
+  /// Удалить покупателя (если есть в документах — будет отключён).
+  Future<void> _delete() async {
+    final ok = await showGlassDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Удалить «${widget.debt.name}»?'),
+        content: Text('Если покупатель уже есть в документах, он не удалится, а будет отключён.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: Text('Удалить')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final msg = await CustomerService.instance.removeOrDisable(widget.debt.customerId, owed: _owed);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    if (!msg.startsWith('Нельзя')) Navigator.of(context).pop();
+  }
+
+  /// Акт сверки с покупателем: покупки в долг и оплаты.
+  Future<void> _statement() async {
+    final db = await AppDatabase.instance.db;
+    final pays = await db.rawQuery('''
+      SELECT p.paid_at, p.amount, p.payment FROM debt_payments p
+      JOIN sales s ON s.id = p.sale_id
+      WHERE s.customer_id = ? AND p.deleted = 0 AND s.deleted = 0''', [widget.debt.customerId]);
+    final rows = <StatementRow>[
+      for (final x in _sales) StatementRow(x.saleDate, 'Покупка в долг', x.total, 0),
+      for (final p in pays)
+        StatementRow(DateTime.fromMillisecondsSinceEpoch(p['paid_at'] as int),
+            'Оплата (${p['payment'] == 'kaspi' ? 'Kaspi' : 'наличные'})', 0, (p['amount'] as num).toDouble()),
+    ];
+    if (!mounted) return;
+    await PrintService.instance.statement(context, name: widget.debt.name, supplier: false, rows: rows);
+  }
+
   double get _owed => _sales.fold(0, (s, x) => s + (x.remaining > 0 ? x.remaining : 0));
 
   Future<void> _pay() async {
@@ -230,7 +270,19 @@ class _CustomerDebtScreenState extends State<CustomerDebtScreen> {
     return Scaffold(
       body: GlassBackground(
         child: Column(children: [
-          GlassHeader(title: widget.debt.name),
+          GlassHeader(title: widget.debt.name, actions: [
+            if (AuthService.instance.current?.isManager ?? false)
+              IconButton(
+                onPressed: _delete,
+                icon: Icon(Icons.delete_outline, color: AppColors.text),
+                tooltip: 'Удалить покупателя',
+              ),
+            IconButton(
+              onPressed: _statement,
+              icon: Icon(Icons.picture_as_pdf_outlined, color: AppColors.text),
+              tooltip: 'Акт сверки (PDF)',
+            ),
+          ]),
           Expanded(
             child: ListView(padding: EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
               GlassCard(

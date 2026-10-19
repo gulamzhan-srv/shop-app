@@ -101,7 +101,7 @@ class _SaleScreenState extends State<SaleScreen> {
 
   Future<void> _editQty(CartLine l) async {
     final c = TextEditingController(text: qtyText(l.qty));
-    final v = await showDialog<double>(
+    final v = await showGlassDialog<double>(
       context: context,
       builder: (d) => AlertDialog(
         title: Text(l.name),

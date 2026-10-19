@@ -169,3 +169,54 @@ class InsightsService {
         .toList();
   }
 }
+
+/// Значение для диаграммы.
+class ChartItem {
+  final String label;
+  final double value;
+  ChartItem(this.label, this.value);
+}
+
+extension InsightsCharts on InsightsService {
+  int _from(int days) => DateTime.now().subtract(Duration(days: days)).millisecondsSinceEpoch;
+
+  /// Продажи по группам (папкам) товаров.
+  Future<List<ChartItem>> salesByGroup({int days = 30}) async {
+    final db = await AppDatabase.instance.db;
+    final rows = await db.rawQuery('''
+      SELECT COALESCE(c.name, 'Без группы') AS g, SUM(l.sum) AS v
+      FROM sale_lines l
+      JOIN sales s ON s.id = l.sale_id
+      JOIN products p ON p.id = l.product_id
+      LEFT JOIN categories c ON c.id = p.category_id AND c.deleted = 0
+      WHERE l.deleted = 0 AND s.deleted = 0 AND s.opening = 0 AND s.sale_date >= ?
+      GROUP BY g ORDER BY v DESC''', [_from(days)]);
+    return rows.map((r) => ChartItem(r['g'] as String, ((r['v'] as num?) ?? 0).toDouble())).toList();
+  }
+
+  /// Продажи по способу оплаты.
+  Future<List<ChartItem>> salesByPayment({int days = 30}) async {
+    final db = await AppDatabase.instance.db;
+    final r = (await db.rawQuery('''
+      SELECT SUM(paid_cash) AS cash, SUM(paid_kaspi) AS kaspi,
+        SUM(CASE WHEN payment = 'debt' THEN total ELSE 0 END) AS debt
+      FROM sales WHERE deleted = 0 AND opening = 0 AND sale_date >= ?''', [_from(days)])).first;
+    double v(String k) => ((r[k] as num?) ?? 0).toDouble();
+    return [
+      ChartItem('Наличные', v('cash')),
+      ChartItem('Kaspi', v('kaspi')),
+      ChartItem('В долг', v('debt')),
+    ].where((x) => x.value > 0).toList();
+  }
+
+  /// Самые продаваемые товары по сумме.
+  Future<List<ChartItem>> topProducts({int days = 30, int limit = 8}) async {
+    final db = await AppDatabase.instance.db;
+    final rows = await db.rawQuery('''
+      SELECT p.name, SUM(l.sum) AS v
+      FROM sale_lines l JOIN sales s ON s.id = l.sale_id JOIN products p ON p.id = l.product_id
+      WHERE l.deleted = 0 AND s.deleted = 0 AND s.sale_date >= ?
+      GROUP BY p.id ORDER BY v DESC LIMIT ?''', [_from(days), limit]);
+    return rows.map((r) => ChartItem(r['name'] as String, ((r['v'] as num?) ?? 0).toDouble())).toList();
+  }
+}

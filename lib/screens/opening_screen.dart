@@ -65,7 +65,7 @@ class _OpeningScreenState extends State<OpeningScreen> {
     final phone = TextEditingController();
     final amount = TextEditingController();
     DateTime? due;
-    final ok = await showDialog<bool>(
+    final ok = await showGlassDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, setD) => AlertDialog(
@@ -138,7 +138,7 @@ class _OpeningScreenState extends State<OpeningScreen> {
   }
 
   Future<void> _deleteDebt(OpeningDebt d, {required bool customer}) async {
-    final ok = await showDialog<bool>(
+    final ok = await showGlassDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text('Удалить начальный долг?'),

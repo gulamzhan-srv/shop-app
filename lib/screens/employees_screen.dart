@@ -32,7 +32,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     final name = TextEditingController();
     final pin = TextEditingController();
     var role = Role.cashier;
-    final ok = await showDialog<bool>(
+    final ok = await showGlassDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, setD) => AlertDialog(
@@ -72,7 +72,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   }
 
   Future<void> _newRecovery() async {
-    final ok = await showDialog<bool>(
+    final ok = await showGlassDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text('Новый код восстановления'),
@@ -90,7 +90,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
 
   Future<void> _changePin(Map<String, Object?> e) async {
     final pin = TextEditingController();
-    final ok = await showDialog<bool>(
+    final ok = await showGlassDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text('Новый PIN: ${e['name']}'),

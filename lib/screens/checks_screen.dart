@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import '../services/print_service.dart';
 import '../services/report_service.dart';
 import '../services/sale_service.dart';
 import '../ui/format.dart';
@@ -168,6 +169,17 @@ Future<void> showCheck(BuildContext context, CheckRow c) async {
             Text('Себестоимость ${money(c.cost)} · прибыль ${money(c.profit)}',
                 style: TextStyle(color: AppColors.accent)),
           if (c.comment != null) Text('Комментарий: ${c.comment}', style: TextStyle(color: AppColors.textDim)),
+          SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => PrintService.instance.check(context, c, lines),
+            icon: Icon(Icons.picture_as_pdf_outlined),
+            label: Text('Чек в PDF: печать / отправить'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.accent,
+              minimumSize: Size.fromHeight(46),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
         ]),
       ),
     ),

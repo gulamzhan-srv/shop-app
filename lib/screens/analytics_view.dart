@@ -7,6 +7,10 @@ import '../ui/format.dart';
 import '../ui/glass.dart';
 import 'debts_screen.dart';
 import 'returns_screen.dart';
+import 'cash_ops_screen.dart';
+import 'kassa_screen.dart';
+import 'receipts_screen.dart';
+import 'reports_screen.dart';
 import 'supplier_debts_screen.dart';
 
 class AnalyticsView extends StatefulWidget {
@@ -159,7 +163,11 @@ class AnalyticsViewState extends State<AnalyticsView> {
         Container(
           height: h < 2 && b.value > 0 ? 2 : h,
           decoration: BoxDecoration(
-            color: AppColors.accent,
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [AppColors.accent, AppColors.accent.withOpacity(0.35)],
+            ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(7), bottom: Radius.circular(2)),
           ),
         ),
@@ -213,6 +221,11 @@ class AnalyticsViewState extends State<AnalyticsView> {
         bars,
       ]),
     );
+  }
+
+  Future<void> _open(Widget w) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => w));
+    reload();
   }
 
   String _vsPrev() => switch (_period) {
@@ -273,7 +286,13 @@ class AnalyticsViewState extends State<AnalyticsView> {
                 Container(
                   height: maxV <= 0 ? 3 : (x / maxV * 22).clamp(3, 22).toDouble(),
                   decoration: BoxDecoration(
-                    color: c.withOpacity(x == maxV && maxV > 0 ? 0.85 : 0.3),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: x == maxV && maxV > 0
+                          ? [c, c.withOpacity(0.45)]
+                          : [c.withOpacity(0.45), c.withOpacity(0.15)],
+                    ),
                     borderRadius: BorderRadius.circular(3),
                   ),
                 ),
@@ -360,7 +379,8 @@ class AnalyticsViewState extends State<AnalyticsView> {
           cur: d.revenue,
           pct: d.delta,
           line1: 'было: ${money(d.prevSales)}',
-          days: d.salesDays),
+          days: d.salesDays,
+          onTap: () => _open(ReportsScreen(initialTab: 1))),
       _kpi(
           title: 'Прибыль (ФИФО)',
           icon: Icons.trending_up,
@@ -369,7 +389,8 @@ class AnalyticsViewState extends State<AnalyticsView> {
           cur: d.profit,
           pct: d.profitDelta,
           line1: d.revenue <= 0 ? null : 'маржа ${(d.profit / d.revenue * 100).round()}%',
-          line2: 'было: ${money(d.prevProfit)}'),
+          line2: 'было: ${money(d.prevProfit)}',
+          onTap: () => _open(ReportsScreen(initialTab: 4))),
       _kpi(
           title: 'Нам должны',
           icon: Icons.call_received,
@@ -402,7 +423,8 @@ class AnalyticsViewState extends State<AnalyticsView> {
           upIsGood: false,
           line1: _ofSales(d.returns, d),
           line2: '${d.returnsCount} возвратов принято',
-          days: d.returnsDays),
+          days: d.returnsDays,
+          onTap: () => _open(ReturnsScreen())),
       _kpi(
           title: 'Расходы из кассы',
           icon: Icons.receipt_outlined,
@@ -413,7 +435,8 @@ class AnalyticsViewState extends State<AnalyticsView> {
           upIsGood: false,
           line1: _ofSales(d.cashOut, d),
           line2: '${d.cashOutCount} операций',
-          days: d.cashOutDays),
+          days: d.cashOutDays,
+          onTap: () => _open(CashOpsScreen())),
       _kpi(
           title: 'Поступления',
           icon: Icons.download_outlined,
@@ -423,13 +446,15 @@ class AnalyticsViewState extends State<AnalyticsView> {
           pct: _chg(d.receipts, d.prevReceipts),
           line1: 'закупка у поставщиков',
           line2: '${d.receiptsCount} документов',
-          days: d.receiptsDays),
+          days: d.receiptsDays,
+          onTap: () => _open(ReceiptsScreen())),
       _kpi(
           title: 'Остаток в кассе',
           icon: Icons.account_balance_wallet_outlined,
           color: Color(0xFFCA8A04),
           value: money(d.cashInRegister),
-          line1: d.shiftOpen ? 'наличные, смена открыта' : 'на закрытии смены'),
+          line1: d.shiftOpen ? 'наличные, смена открыта' : 'на закрытии смены',
+          onTap: () => _open(KassaScreen())),
     ];
     return LayoutBuilder(builder: (c, box) {
       final w = (box.maxWidth - 10) / 2;

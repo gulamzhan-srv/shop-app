@@ -2,6 +2,8 @@
 
 import 'package:flutter/material.dart';
 
+import '../db/repo.dart';
+import '../services/print_service.dart';
 import '../services/sale_service.dart';
 import '../services/shift_service.dart';
 import '../ui/format.dart';
@@ -53,7 +55,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
     final amount = TextEditingController();
     final who = TextEditingController();
     final comment = TextEditingController();
-    final ok = await showDialog<bool>(
+    final ok = await showGlassDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text(kind == 'in' ? 'Приход денег в кассу' : 'Расход денег из кассы'),
@@ -93,7 +95,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
   Future<void> _close() async {
     final expected = _sum!.cashExpected;
     final counted = TextEditingController(text: qtyText(expected.roundToDouble()));
-    final ok = await showDialog<bool>(
+    final ok = await showGlassDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(builder: (c, setD) {
         final diff = (parseNum(counted.text) ?? 0) - expected;
@@ -143,12 +145,28 @@ class _ShiftScreenState extends State<ShiftScreen> {
 
   String _payName(String p) => paymentName(p);
 
+  /// Отчёт по смене в PDF: просмотр, печать, отправить.
+  Future<void> _print() async {
+    final sh = _shift, sum = _sum;
+    if (sh == null || sum == null) return;
+    final rows = await Repo.instance.list('employees', where: 'id = ?', args: [sh.openedBy]);
+    if (!mounted) return;
+    await PrintService.instance.shift(context, sh, sum, rows.isEmpty ? '' : rows.first['name'] as String);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: GlassBackground(
         child: Column(children: [
-          GlassHeader(title: 'Касса · смена'),
+          GlassHeader(title: 'Касса · смена', actions: [
+            if (_shift != null && _sum != null)
+              IconButton(
+                onPressed: _print,
+                icon: Icon(Icons.picture_as_pdf_outlined, color: AppColors.text),
+                tooltip: 'Отчёт по смене (PDF)',
+              ),
+          ]),
           Expanded(
             child: _loading
                 ? Center(child: CircularProgressIndicator())

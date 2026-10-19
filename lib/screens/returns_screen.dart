@@ -85,7 +85,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
   Future<void> _approve(ReturnInfo r) async {
     String type = 'to_stock';
     String refund = r.salePayment == 'kaspi' ? 'kaspi' : (r.salePayment == 'debt' ? 'debt' : 'cash');
-    final ok = await showDialog<bool>(
+    final ok = await showGlassDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, setD) => AlertDialog(

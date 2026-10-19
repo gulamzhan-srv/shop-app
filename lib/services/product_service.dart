@@ -2,6 +2,7 @@
 
 import '../db/database.dart';
 import '../db/repo.dart';
+import 'auth_service.dart';
 import 'photo_service.dart';
 
 class Product {
@@ -227,10 +228,21 @@ class ProductService {
   }
 
   /// Удалить товар (можно, только если остаток 0).
-  Future<String?> delete(Product p) async {
-    if (p.id == null) return null;
-    if (p.stock > 0) return 'Нельзя удалить: на складе есть остаток';
+  /// Удалить товар. Если он уже есть в документах (поступления, продажи) — не удаляем,
+  /// а отключаем (скрывается из продажи, история сохраняется). Возвращает текст результата.
+  Future<String> delete(Product p) async {
+    if (!(AuthService.instance.current?.isManager ?? false)) return 'Удалять может только хозяин или администратор';
+    if (p.id == null) return 'Товар не сохранён';
+    final db = await AppDatabase.instance.db;
+    final r = await db.rawQuery('''
+      SELECT (SELECT COUNT(*) FROM receipt_lines WHERE product_id = ? AND deleted = 0)
+           + (SELECT COUNT(*) FROM sale_lines WHERE product_id = ? AND deleted = 0) AS c''', [p.id, p.id]);
+    if (((r.first['c'] as int?) ?? 0) > 0) {
+      final row = (await db.query('products', where: 'id = ?', whereArgs: [p.id])).first;
+      await _repo.save('products', {...row, 'active': 0});
+      return 'Товар есть в документах, поэтому он не удалён, а отключён (скрыт из продажи)';
+    }
     await _repo.remove('products', p.id!);
-    return null;
+    return 'Товар удалён';
   }
 }

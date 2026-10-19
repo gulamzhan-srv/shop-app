@@ -33,9 +33,10 @@ class CoinIcon extends StatelessWidget {
       alignment: Alignment.center,
       child: Text('₸',
           style: TextStyle(
+            fontFamily: 'DejaVuSans',
             color: Color(0xFF7A5200),
             fontSize: size * 0.56,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w700,
             height: 1,
             shadows: [Shadow(color: Color(0x88FFFFFF), offset: Offset(0, 1))],
           )),

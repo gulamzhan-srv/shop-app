@@ -27,7 +27,7 @@ Future<Product?> resolveBarcode(BuildContext context, String code) async {
   final found = await ProductService.instance.byBarcode(code);
   if (found != null || !context.mounted) return found;
   final manager = AuthService.instance.current?.isManager ?? false;
-  final action = await showDialog<String>(
+  final action = await showGlassDialog<String>(
     context: context,
     builder: (c) => AlertDialog(
       title: Text('Штрихкод не найден'),

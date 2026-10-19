@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../db/repo.dart';
 import 'device_service.dart';
+import 'location_service.dart';
 
 enum Role { owner, admin, cashier }
 
@@ -65,7 +66,9 @@ class LogEntry {
   final String event;
   final String ip;
   final String device;
-  LogEntry(this.at, this.who, this.role, this.event, this.ip, this.device);
+  final double? lat;
+  final double? lon;
+  LogEntry(this.at, this.who, this.role, this.event, this.ip, this.device, [this.lat, this.lon]);
 }
 
 class AuthService {
@@ -232,7 +235,10 @@ class AuthService {
       final e = who ?? current;
       final ip = await DeviceService.instance.ip();
       final device = await DeviceService.instance.name();
+      final loc = await LocationService.instance.current();
       await _repo.save('access_log', {
+        'lat': loc?.$1,
+        'lon': loc?.$2,
         'at': _repo.now(),
         'employee_id': e?.id,
         'employee_name': e?.name ?? '—',
@@ -262,6 +268,8 @@ class AuthService {
               r['event'] as String,
               (r['ip'] as String?) ?? '',
               (r['device_name'] as String?) ?? '',
+              (r['lat'] as num?)?.toDouble(),
+              (r['lon'] as num?)?.toDouble(),
             ))
         .toList();
   }

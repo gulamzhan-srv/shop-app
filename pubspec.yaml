@@ -38,6 +38,11 @@ dependencies:
   # Печать накладных (PDF: печать, сохранение, отправка в WhatsApp и т.п.)
   pdf: ^3.11.1
   printing: ^5.13.4
+  # Автообновление: номер версии приложения и открытие ссылки на новый APK
+  package_info_plus: ^8.1.0
+  url_launcher: ^6.3.1
+  # Координаты входа в журнале администратора
+  geolocator: ^13.0.2
 
 dev_dependencies:
   flutter_test:
@@ -49,3 +54,10 @@ flutter:
   assets:
     - assets/icon.png
     - assets/fonts/
+  # Запасной шрифт со знаком тенге ₸ и кириллицей (если в основном шрифте нет символа)
+  fonts:
+    - family: DejaVuSans
+      fonts:
+        - asset: assets/fonts/DejaVuSans.ttf
+        - asset: assets/fonts/DejaVuSans-Bold.ttf
+          weight: 700

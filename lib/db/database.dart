@@ -14,7 +14,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _dbName = 'shop.db';
-  static const _dbVersion = 7;
+  static const _dbVersion = 8;
 
   Database? _db;
 
@@ -195,6 +195,14 @@ class AppDatabase {
       'ALTER TABLE products ADD COLUMN category_id TEXT',
       'ALTER TABLE products ADD COLUMN min_stock REAL NOT NULL DEFAULT 0',
       'ALTER TABLE products ADD COLUMN active INTEGER NOT NULL DEFAULT 1',
+    ],
+    8: [
+      // Отключение покупателей и поставщиков (если они уже есть в документах — не удаляем).
+      'ALTER TABLE customers ADD COLUMN active INTEGER NOT NULL DEFAULT 1',
+      'ALTER TABLE suppliers ADD COLUMN active INTEGER NOT NULL DEFAULT 1',
+      // Координаты входа в журнале администратора.
+      'ALTER TABLE access_log ADD COLUMN lat REAL',
+      'ALTER TABLE access_log ADD COLUMN lon REAL',
     ],
   };
 

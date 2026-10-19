@@ -192,7 +192,7 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
 
   Future<void> _newCategory() async {
     final c = TextEditingController();
-    final ok = await showDialog<bool>(
+    final ok = await showGlassDialog<bool>(
       context: context,
       builder: (d) => AlertDialog(
         title: Text('Новая группа товаров'),
@@ -249,10 +249,12 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
   }
 
   Future<void> _delete() async {
-    final ok = await showDialog<bool>(
+    final ok = await showGlassDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text('Удалить товар?'),
+        content: Text('Если товар уже есть в поступлениях или продажах, он не удалится, '
+            'а будет отключён: скроется из продажи, история сохранится.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: Text('Отмена')),
           TextButton(onPressed: () => Navigator.pop(c, true), child: Text('Удалить')),
@@ -260,9 +262,10 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
       ),
     );
     if (ok != true) return;
-    final err = await ProductService.instance.delete(widget.product!);
-    if (err != null) return setState(() => _error = err);
-    if (mounted) Navigator.of(context).pop(true);
+    final msg = await ProductService.instance.delete(widget.product!);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    Navigator.of(context).pop(true);
   }
 
   Widget _photoTile(String n) => Stack(children: [

@@ -3,8 +3,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'glass.dart';
+
 Future<void> showRecoveryCode(BuildContext context, String code) {
-  return showDialog<void>(
+  return showGlassDialog<void>(
     context: context,
     barrierDismissible: false,
     builder: (c) => AlertDialog(

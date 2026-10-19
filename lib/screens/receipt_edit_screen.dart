@@ -166,7 +166,7 @@ class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
   Future<void> _newSupplier() async {
     final name = TextEditingController();
     final phone = TextEditingController();
-    final ok = await showDialog<bool>(
+    final ok = await showGlassDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text('Новый поставщик'),
@@ -238,7 +238,7 @@ class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
   }
 
   Future<void> _delete() async {
-    final ok = await showDialog<bool>(
+    final ok = await showGlassDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text('Удалить поступление?'),

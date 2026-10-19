@@ -2,6 +2,7 @@
 // кто, когда, с какого телефона и IP-адреса входил; когда телефоны последний раз синхронизировались.
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/auth_service.dart';
 import '../ui/format.dart';
@@ -95,6 +96,21 @@ class _JournalScreenState extends State<JournalScreen> {
                               SizedBox(height: 2),
                               Text('${e.event} · ${e.device} · IP ${e.ip}',
                                   style: TextStyle(color: AppColors.textDim, fontSize: 12)),
+                              if (e.lat != null && e.lon != null)
+                                InkWell(
+                                  onTap: () => launchUrl(
+                                      Uri.parse('https://maps.google.com/?q=${e.lat},${e.lon}'),
+                                      mode: LaunchMode.externalApplication),
+                                  child: Padding(
+                                    padding: EdgeInsets.only(top: 3),
+                                    child: Row(children: [
+                                      Icon(Icons.location_on_outlined, size: 15, color: AppColors.accent),
+                                      SizedBox(width: 3),
+                                      Text('${e.lat!.toStringAsFixed(5)}, ${e.lon!.toStringAsFixed(5)} · на карте',
+                                          style: TextStyle(color: AppColors.accent, fontSize: 12, fontWeight: FontWeight.w700)),
+                                    ]),
+                                  ),
+                                ),
                             ]),
                           ),
                         ),

@@ -13,6 +13,7 @@ import 'package:intl/intl.dart';
 import '../services/auth_service.dart';
 import '../services/rates_service.dart';
 import '../services/sync_service.dart';
+import '../services/update_service.dart';
 import '../ui/glass.dart';
 import 'analytics_view.dart';
 import 'change_pin_screen.dart';
@@ -26,9 +27,11 @@ import 'opening_screen.dart';
 import 'pin_screen.dart';
 import 'products_screen.dart';
 import 'receipts_screen.dart';
+import 'report_charts.dart';
 import 'reports_screen.dart';
 import 'returns_screen.dart';
 import 'sale_screen.dart';
+import 'theme_screen.dart';
 import 'supplier_debts_screen.dart';
 import 'sync_screen.dart' show SyncScreen, SyncProgressBar;
 
@@ -63,6 +66,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (mounted) setState(() => _rates = r);
     });
     _refresh(silent: true);
+    // Есть ли новая версия программы — спросим один раз за запуск.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) UpdateService.instance.checkAndAsk(context);
+    });
   }
 
   @override
@@ -291,6 +298,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _reportsPage() => RefreshIndicator(
         onRefresh: () => _refresh(),
         child: _page('Отчёты', [
+          _section('Диаграммы'),
+          ReportCharts(),
           _section('Подробные отчёты'),
           _grid([
             _tile(Icons.bar_chart_outlined, 'Продажи и маржа', () => _go(ReportsScreen()),
@@ -312,7 +321,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _grid([
           if (_manager) _tile(Icons.cloud_sync_outlined, 'Google Диск', () => _go(SyncScreen()), hint: 'синхронизация'),
           _tile(Icons.password, 'Сменить PIN', () => _go(ChangePinScreen())),
-          _tile(Icons.palette_outlined, 'Тема', _pickTheme),
+          _tile(Icons.palette_outlined, 'Тема и шрифт', () => _go(ThemeScreen()), hint: 'цвета, размер текста'),
+          _tile(Icons.system_update_outlined, 'Обновление',
+              () => UpdateService.instance.checkAndAsk(context, silent: false), hint: 'проверить версию'),
           if (_manager) _tile(Icons.badge_outlined, 'Сотрудники', () => _go(EmployeesScreen()), hint: 'роли, PIN'),
           if (_admin) _tile(Icons.manage_search_outlined, 'Журнал входов', () => _go(JournalScreen())),
           if (_manager) _tile(Icons.playlist_add_check_outlined, 'Начальные остатки', () => _go(OpeningScreen())),

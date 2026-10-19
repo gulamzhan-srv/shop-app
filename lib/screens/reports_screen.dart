@@ -9,7 +9,9 @@ import '../ui/glass.dart';
 import 'checks_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
-  ReportsScreen({super.key});
+  /// Какая вкладка открыта сразу: 0 Товары, 1 Чеки, 2 Клиенты, 3 Топ продаж, 4 Маржа.
+  final int initialTab;
+  ReportsScreen({super.key, this.initialTab = 0});
   @override
   State<ReportsScreen> createState() => _ReportsScreenState();
 }
@@ -107,6 +109,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final sum = p.fold<double>(0, (s, x) => s + x.sum);
     final cost = p.fold<double>(0, (s, x) => s + x.cost);
     return DefaultTabController(
+      initialIndex: widget.initialTab,
       length: 5,
       child: Scaffold(
         body: GlassBackground(

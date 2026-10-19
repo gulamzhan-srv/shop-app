@@ -223,7 +223,7 @@ class _GroupsSheetState extends State<_GroupsSheet> {
 
   Future<void> _edit(ProductGroup? c) async {
     final t = TextEditingController(text: c?.name ?? '');
-    final ok = await showDialog<bool>(
+    final ok = await showGlassDialog<bool>(
       context: context,
       builder: (d) => AlertDialog(
         title: Text(c == null ? 'Новая группа' : 'Переименовать группу'),
@@ -240,7 +240,7 @@ class _GroupsSheetState extends State<_GroupsSheet> {
   }
 
   Future<void> _delete(ProductGroup c) async {
-    final ok = await showDialog<bool>(
+    final ok = await showGlassDialog<bool>(
       context: context,
       builder: (d) => AlertDialog(
         title: Text('Удалить группу «${c.name}»?'),

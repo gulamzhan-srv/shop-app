@@ -65,7 +65,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
 
   Future<void> _print(ReceiptDoc d) async {
     try {
-      await PrintService.instance.printReceipt(d, withPrices: _manager);
+      await PrintService.instance.receipt(context, d, withPrices: _manager);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось подготовить печать: $e')));

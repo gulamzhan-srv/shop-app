@@ -19,7 +19,7 @@ final _bootStatus = ValueNotifier<String>('Запуск…');
 bool _appStarted = false;
 
 /// Метка версии: видна на экране загрузки и на экране ошибки.
-const _buildTag = 'версия 20.10-2';
+const _buildTag = 'версия 20.10-7';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -121,6 +121,15 @@ class ShopApp extends StatelessWidget {
     );
   }
 
+  /// Шрифт по названию (Google Fonts); если не получилось — Manrope.
+  TextTheme _fontTheme(String font, TextTheme base) {
+    try {
+      return GoogleFonts.getTextTheme(font, base);
+    } catch (_) {
+      return GoogleFonts.manropeTextTheme(base);
+    }
+  }
+
   Widget _app(AppPalette palette) {
     final base = ThemeData(
       brightness: palette.brightness,
@@ -140,7 +149,13 @@ class ShopApp extends StatelessWidget {
       theme: base.copyWith(
         scaffoldBackgroundColor: AppColors.bg,
         colorScheme: base.colorScheme.copyWith(primary: palette.accent, onPrimary: palette.onAccent),
-        textTheme: GoogleFonts.manropeTextTheme(base.textTheme),
+        // Если в основном шрифте нет символа (например, ₸) — берём его из встроенного DejaVu Sans.
+        textTheme: _fontTheme(palette.font, base.textTheme).apply(fontFamilyFallback: ['DejaVuSans']),
+      ),
+      // Размер текста из настроек темы.
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(palette.textScale)),
+        child: child ?? SizedBox.shrink(),
       ),
       home: _home,
     );

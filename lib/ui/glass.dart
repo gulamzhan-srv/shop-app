@@ -1,5 +1,6 @@
 // Стеклянный стиль: тёмный фон с цветными пятнами и полупрозрачные карточки с размытием.
 
+import 'dart:convert';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -17,9 +18,20 @@ class AppPalette {
   final bool solid;
   /// Цвет заливки шапки экрана и строки состояния (null — прозрачная шапка).
   final Color? header;
+  /// Непрозрачность «стеклянных» карточек (0.03 — почти прозрачные, 0.35 — плотные).
+  final double cardOpacity;
+  /// Сила размытия под карточками.
+  final double blur;
+  /// Шрифт (Google Fonts) и масштаб текста.
+  final String font;
+  final double textScale;
   AppPalette({
     this.solid = false,
     this.header,
+    this.cardOpacity = 0.08,
+    this.blur = 20,
+    this.font = 'Manrope',
+    this.textScale = 1.0,
     required this.id,
     required this.name,
     required this.brightness,
@@ -37,6 +49,76 @@ class AppPalette {
     required this.blobOpacity,
   });
   bool get dark => brightness == Brightness.dark;
+
+  /// Копия темы с изменёнными шрифтом и размером текста.
+  AppPalette withFont(String f, double scale) => AppPalette(
+        id: id, name: name, brightness: brightness, bg: bg, text: text, textDim: textDim, accent: accent,
+        onAccent: onAccent, warn: warn, amber: amber, danger: danger, blob1: blob1, blob2: blob2, sheet: sheet,
+        blobOpacity: blobOpacity, solid: solid, header: header, cardOpacity: cardOpacity, blur: blur,
+        font: f, textScale: scale,
+      );
+}
+
+/// Настройки «своей» темы (сохраняются на телефоне).
+class ThemeSettings {
+  bool dark;
+  int accent; // цвет кнопок
+  int bg; // цвет фона
+  bool solid; // плоские карточки вместо стекла
+  bool header; // цветная шапка
+  double cardOpacity;
+  double blur;
+  String font;
+  double textScale;
+  ThemeSettings({
+    this.dark = false,
+    this.accent = 0xFFD7191F,
+    this.bg = 0xFFF3F4F6,
+    this.solid = true,
+    this.header = true,
+    this.cardOpacity = 0.08,
+    this.blur = 20,
+    this.font = 'Manrope',
+    this.textScale = 1.0,
+  });
+
+  Map<String, Object> toJson() => {
+        'dark': dark, 'accent': accent, 'bg': bg, 'solid': solid, 'header': header,
+        'cardOpacity': cardOpacity, 'blur': blur, 'font': font, 'textScale': textScale,
+      };
+
+  static ThemeSettings fromJson(Map<String, dynamic> j) => ThemeSettings(
+        dark: j['dark'] as bool? ?? false,
+        accent: (j['accent'] as num?)?.toInt() ?? 0xFFD7191F,
+        bg: (j['bg'] as num?)?.toInt() ?? 0xFFF3F4F6,
+        solid: j['solid'] as bool? ?? true,
+        header: j['header'] as bool? ?? true,
+        cardOpacity: (j['cardOpacity'] as num?)?.toDouble() ?? 0.08,
+        blur: (j['blur'] as num?)?.toDouble() ?? 20,
+        font: j['font'] as String? ?? 'Manrope',
+        textScale: (j['textScale'] as num?)?.toDouble() ?? 1.0,
+      );
+
+  /// Собрать тему из настроек.
+  AppPalette toPalette() {
+    final a = Color(accent);
+    final onA = a.computeLuminance() > 0.5 ? Color(0xFF111111) : Color(0xFFFFFFFF);
+    return AppPalette(
+      id: 'custom', name: 'Своя', brightness: dark ? Brightness.dark : Brightness.light,
+      bg: Color(bg),
+      text: dark ? Color(0xFFECEFF4) : Color(0xFF111827),
+      textDim: dark ? Color(0xFF9AA4B2) : Color(0xFF6B7280),
+      accent: a, onAccent: onA,
+      warn: dark ? Color(0xFFFBBF24) : Color(0xFFC2410C),
+      amber: Color(0xFFF59E0B),
+      danger: dark ? Color(0xFFF87171) : Color(0xFFDC2626),
+      blob1: a, blob2: a.withOpacity(0.6),
+      sheet: dark ? Color.lerp(Color(bg), Colors.white, 0.08)! : Color(0xFFFFFFFF),
+      blobOpacity: solid ? 0 : 0.3,
+      solid: solid, header: header ? a : null,
+      cardOpacity: cardOpacity, blur: blur, font: font, textScale: textScale,
+    );
+  }
 }
 
 /// Темы приложения: GRS (красно-белая), Ночь, День, Рубин (красная), Зумруд (зелёная).
@@ -50,12 +132,32 @@ class AppThemes {
     blob1: Color(0xFFF3F4F6), blob2: Color(0xFFF3F4F6), sheet: Color(0xFFFFFFFF), blobOpacity: 0,
     solid: true, header: Color(0xFFD7191F),
   );
+  /// Тёмная тема: ровный графитовый фон, плотные карточки, читаемый серый текст.
   static final night = AppPalette(
     id: 'night', name: 'Ночь', brightness: Brightness.dark,
-    bg: Color(0xFF0B0F17), text: Color(0xFFF5F7FA), textDim: Color(0xBFF5F7FA),
+    bg: Color(0xFF111318), text: Color(0xFFECEFF4), textDim: Color(0xFF9AA4B2),
     accent: Color(0xFF2DD4BF), onAccent: Color(0xFF062A26),
     warn: Color(0xFFFBBF24), amber: Color(0xFFF59E0B), danger: Color(0xFFF87171),
-    blob1: Color(0xFF2DD4BF), blob2: Color(0xFFF59E0B), sheet: Color(0xFF151B27), blobOpacity: 0.4,
+    blob1: Color(0xFF2DD4BF), blob2: Color(0xFF6366F1), sheet: Color(0xFF1B1F27), blobOpacity: 0.18,
+    cardOpacity: 0.06, blur: 14,
+  );
+  /// Графит: тёмная плоская тема с оранжевыми кнопками.
+  static final graphite = AppPalette(
+    id: 'graphite', name: 'Графит', brightness: Brightness.dark,
+    bg: Color(0xFF16181D), text: Color(0xFFF1F3F6), textDim: Color(0xFFA0A8B4),
+    accent: Color(0xFFF97316), onAccent: Color(0xFFFFFFFF),
+    warn: Color(0xFFFBBF24), amber: Color(0xFFF59E0B), danger: Color(0xFFF87171),
+    blob1: Color(0xFF16181D), blob2: Color(0xFF16181D), sheet: Color(0xFF22252C), blobOpacity: 0,
+    solid: true, header: Color(0xFF22252C),
+  );
+  /// Океан: светлая тема с синей шапкой.
+  static final ocean = AppPalette(
+    id: 'ocean', name: 'Океан', brightness: Brightness.light,
+    bg: Color(0xFFF1F5F9), text: Color(0xFF0F172A), textDim: Color(0xFF64748B),
+    accent: Color(0xFF2563EB), onAccent: Color(0xFFFFFFFF),
+    warn: Color(0xFFC2410C), amber: Color(0xFFF59E0B), danger: Color(0xFFDC2626),
+    blob1: Color(0xFFF1F5F9), blob2: Color(0xFFF1F5F9), sheet: Color(0xFFFFFFFF), blobOpacity: 0,
+    solid: true, header: Color(0xFF2563EB),
   );
   static final day = AppPalette(
     id: 'day', name: 'День', brightness: Brightness.light,
@@ -78,7 +180,10 @@ class AppThemes {
     warn: Color(0xFFB45309), amber: Color(0xFFF2B705), danger: Color(0xFFDC2626),
     blob1: Color(0xFF15A06E), blob2: Color(0xFFFFC72C), sheet: Color(0xFFFFFFFF), blobOpacity: 0.25,
   );
-  static final all = [grs, night, day, kaspi, halyk];
+  static final all = [grs, ocean, night, graphite, day, kaspi, halyk];
+
+  /// Своя тема пользователя (null — ещё не настраивал).
+  static ThemeSettings custom = ThemeSettings();
 
   /// Текущая тема. Меняется в разделе «Тема», сохраняется на телефоне.
   static final current = ValueNotifier<AppPalette>(grs);
@@ -94,7 +199,19 @@ class AppThemes {
         await p.setBool('theme_grs_set', true);
         await p.setString('theme', grs.id);
       }
-      current.value = byId(p.getString('theme'));
+      final cj = p.getString('theme_custom');
+      if (cj != null) {
+        try {
+          custom = ThemeSettings.fromJson(jsonDecode(cj) as Map<String, dynamic>);
+        } catch (_) {}
+      }
+      final id = p.getString('theme');
+      var pal = id == 'custom' ? custom.toPalette() : byId(id);
+      // Шрифт и размер текста можно менять и для готовых тем.
+      final f = p.getString('theme_font');
+      final sc = p.getDouble('theme_scale');
+      if (id != 'custom' && (f != null || sc != null)) pal = pal.withFont(f ?? pal.font, sc ?? pal.textScale);
+      current.value = pal;
     } catch (_) {}
   }
 
@@ -111,6 +228,12 @@ class AppThemes {
     try {
       final p = await SharedPreferences.getInstance();
       await p.setString('theme', palette.id);
+      if (palette.id == 'custom') {
+        await p.setString('theme_custom', jsonEncode(custom.toJson()));
+      } else {
+        await p.setString('theme_font', palette.font);
+        await p.setDouble('theme_scale', palette.textScale);
+      }
     } catch (_) {}
   }
 }
@@ -233,11 +356,11 @@ class GlassCard extends StatelessWidget {
     final card = ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        filter: ImageFilter.blur(sigmaX: AppThemes.current.value.blur, sigmaY: AppThemes.current.value.blur),
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
-            color: AppColors.overlay(0.08),
+            color: AppColors.overlay(AppThemes.current.value.cardOpacity),
             borderRadius: BorderRadius.circular(radius),
             border: Border.all(color: borderColor ?? AppColors.overlay(0.14)),
           ),
@@ -361,4 +484,40 @@ class AccentButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Окно поверх экрана с размытым прозрачным фоном («стекло») — для всех диалогов.
+/// Используется вместо showDialog: те же параметры context / builder / barrierDismissible.
+Future<T?> showGlassDialog<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  bool barrierDismissible = true,
+}) {
+  return showGeneralDialog<T>(
+    context: context,
+    barrierDismissible: barrierDismissible,
+    barrierLabel: 'Закрыть',
+    barrierColor: Colors.black.withOpacity(0.22),
+    transitionDuration: Duration(milliseconds: 180),
+    pageBuilder: (ctx, _, __) {
+      final theme = Theme.of(ctx);
+      return BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 9, sigmaY: 9),
+        child: Theme(
+          // Полупрозрачный фон самого окна (Material 3 берёт его из surfaceContainerHigh).
+          data: theme.copyWith(
+            colorScheme: theme.colorScheme.copyWith(
+              surfaceContainerHigh: AppColors.sheet.withOpacity(0.86),
+              surfaceTint: Colors.transparent,
+            ),
+          ),
+          child: Builder(builder: builder),
+        ),
+      );
+    },
+    transitionBuilder: (_, a, __, child) => FadeTransition(
+      opacity: a,
+      child: ScaleTransition(scale: Tween(begin: 0.96, end: 1.0).animate(a), child: child),
+    ),
+  );
 }
