@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../db/database.dart';
 import '../services/supplier_debt_service.dart';
 import '../ui/format.dart';
 import '../ui/glass.dart';
@@ -15,9 +16,10 @@ class SupplierDebtsScreen extends StatefulWidget {
 }
 
 class _SupplierDebtsScreenState extends State<SupplierDebtsScreen> {
-  List<SupplierDebt> _items = [];
+  List<_SupRow> _all = [];
   bool _loading = true;
-  bool _onlyOwing = true;
+  String _filter = 'all'; // all — все, owe — мы должны, soon — срок близко
+  final _q = TextEditingController();
 
   @override
   void initState() {
@@ -25,147 +27,195 @@ class _SupplierDebtsScreenState extends State<SupplierDebtsScreen> {
     _load();
   }
 
+  /// Все поставщики: долг (если есть) и дата последней поставки.
   Future<void> _load() async {
-    List<SupplierDebt> l = [];
+    final rows = <_SupRow>[];
     try {
-      l = await SupplierDebtService.instance.bySupplier(onlyOwing: _onlyOwing);
+      final debts = {for (final d in await SupplierDebtService.instance.bySupplier()) d.supplierId: d};
+      final db = await AppDatabase.instance.db;
+      final sup = await db.rawQuery('''
+        SELECT s.id, s.name, s.phone,
+          (SELECT MAX(r.doc_date) FROM receipts r WHERE r.supplier_id = s.id AND r.deleted = 0) AS last
+        FROM suppliers s WHERE s.deleted = 0
+        ORDER BY s.name COLLATE NOCASE''');
+      for (final r in sup) {
+        final id = r['id'] as String;
+        final d = debts[id] ?? SupplierDebt(id, r['name'] as String, r['phone'] as String?, 0, 0, null);
+        rows.add(_SupRow(d, r['last'] == null ? null : DateTime.fromMillisecondsSinceEpoch(r['last'] as int)));
+      }
+      rows.sort((a, b) => b.debt.owed.compareTo(a.debt.owed));
     } catch (_) {}
     if (mounted) {
       setState(() {
-        _items = l;
+        _all = rows;
         _loading = false;
       });
     }
   }
 
-  Widget _legend(Color c, String t) => Row(children: [
-        Container(width: 12, height: 12, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(4))),
-        SizedBox(width: 6),
-        Text(t, style: TextStyle(color: AppColors.textDim, fontSize: 12)),
-      ]);
+  List<_SupRow> get _shown {
+    final q = _q.text.trim().toLowerCase();
+    return _all.where((r) {
+      if (q.isNotEmpty && !r.debt.name.toLowerCase().contains(q)) return false;
+      if (_filter == 'owe') return r.debt.owed > 0.5;
+      if (_filter == 'soon') return r.debt.soon;
+      return true;
+    }).toList();
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    final total = _items.fold<double>(0, (s, c) => s + c.owed);
-    final soon = _items.where((c) => c.soon).length;
-    return Scaffold(
-      body: GlassBackground(
-        child: Column(children: [
-          GlassHeader(title: 'Долги поставщикам'),
-          Expanded(
-            child: _loading
-                ? Center(child: CircularProgressIndicator())
-                : ListView(padding: EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
-                    GlassCard(
-                      child: Row(children: [
-                        Expanded(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text('Мы должны', style: TextStyle(color: AppColors.textDim)),
-                            SizedBox(height: 4),
-                            Text(money(total),
-                                style: TextStyle(color: AppColors.text, fontSize: 24, fontWeight: FontWeight.w800)),
-                          ]),
-                        ),
-                        Text('${_items.where((c) => c.owed > 0.5).length} поставщ.',
-                            style: TextStyle(color: AppColors.textDim)),
-                      ]),
-                    ),
-                    if (soon > 0) ...[
-                      SizedBox(height: 10),
-                      GlassCard(
-                        borderColor: AppColors.warn.withOpacity(0.55),
-                        child: Row(children: [
-                          Icon(Icons.notifications_active_outlined, color: AppColors.warn),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text('Срок оплаты $soon поставщикам — в ближайшие 3 дня или уже прошёл',
-                                style: TextStyle(color: AppColors.text)),
-                          ),
-                        ]),
-                      ),
-                    ],
-                    SizedBox(height: 8),
-                    Row(children: [
-                      _legend(AppColors.accent, 'Оплачено'),
-                      SizedBox(width: 14),
-                      _legend(AppColors.amber, 'Долг'),
-                      Spacer(),
-                      FilterChip(
-                        label: Text('Только долги'),
-                        selected: _onlyOwing,
-                        onSelected: (v) {
-                          _onlyOwing = v;
-                          _load();
-                        },
-                      ),
-                    ]),
-                    SizedBox(height: 8),
-                    if (_items.isEmpty)
-                      Padding(
-                        padding: EdgeInsets.only(top: 40),
-                        child: Center(
-                          child: Text('Долгов перед поставщиками нет.\n'
-                              'Чтобы взять товар в долг, в поступлении включите «Взять в долг у поставщика».',
-                              textAlign: TextAlign.center, style: TextStyle(color: AppColors.textDim)),
-                        ),
-                      ),
-                    for (final c in _items)
-                      Padding(padding: EdgeInsets.only(bottom: 10), child: _card(c)),
-                  ]),
+  Widget _tile(String label, String value, Color c) => Expanded(
+        child: Container(
+          padding: EdgeInsets.fromLTRB(14, 12, 14, 12),
+          decoration: BoxDecoration(
+            color: c.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: c.withOpacity(0.45), width: 1.5),
           ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w700, fontSize: 14)),
+            SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(value, style: TextStyle(color: c, fontSize: 22, fontWeight: FontWeight.w800)),
+            ),
+          ]),
+        ),
+      );
+
+  Widget _chip(String id, String label) {
+    final on = _filter == id;
+    return Padding(
+      padding: EdgeInsets.only(right: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => setState(() => _filter = id),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: on ? AppColors.accent : AppColors.sheet,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: on ? AppColors.accent : AppColors.overlay(0.15)),
+          ),
+          child: Text(label,
+              style: TextStyle(
+                  color: on ? AppColors.onAccent : AppColors.text, fontWeight: FontWeight.w700, fontSize: 14)),
+        ),
+      ),
+    );
+  }
+
+  Widget _row(_SupRow r) {
+    final d = r.debt;
+    final owe = d.owed > 0.5;
+    return InkWell(
+      onTap: () async {
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => SupplierDebtScreen(debt: d)));
+        _load();
+      },
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(children: [
+          Container(
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: AppColors.accent.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+            child: Text(d.name.isEmpty ? '?' : d.name.substring(0, 1).toUpperCase(),
+                style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800, fontSize: 18)),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(d.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w700, fontSize: 16)),
+              if (owe && d.nearestDue != null)
+                Text(d.overdue ? 'срок прошёл ${dateText(d.nearestDue!)}' : 'оплатить до ${dateText(d.nearestDue!)}',
+                    style: TextStyle(color: d.soon ? AppColors.warn : AppColors.textDim, fontSize: 12.5))
+              else if (r.last != null)
+                Text('поставка ${dateText(r.last!)}', style: TextStyle(color: AppColors.textDim, fontSize: 12.5)),
+            ]),
+          ),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(owe ? '−${money(d.owed)}' : money(0),
+                style: TextStyle(
+                    color: owe ? AppColors.danger : AppColors.textDim, fontWeight: FontWeight.w800, fontSize: 17)),
+            if (owe)
+              Text('мы должны', style: TextStyle(color: AppColors.danger, fontSize: 12, fontWeight: FontWeight.w700)),
+          ]),
         ]),
       ),
     );
   }
 
-  Widget _card(SupplierDebt c) {
-    final paidShare = c.taken <= 0 ? 1.0 : (c.paid / c.taken).clamp(0.0, 1.0);
-    final warn = c.soon;
-    return GlassCard(
-      borderColor: warn ? AppColors.warn.withOpacity(0.55) : null,
-      onTap: () async {
-        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => SupplierDebtScreen(debt: c)));
-        _load();
-      },
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
+  @override
+  Widget build(BuildContext context) {
+    final owed = _all.fold<double>(0, (s, r) => s + r.debt.owed);
+    final paid = _all.fold<double>(0, (s, r) => s + r.debt.paid);
+    final list = _shown;
+    return Scaffold(
+      body: GlassBackground(
+        child: Column(children: [
+          GlassHeader(title: 'Поставщики'),
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(c.name, style: TextStyle(color: AppColors.text, fontSize: 16, fontWeight: FontWeight.w800)),
-              if (c.phone != null && c.phone!.isNotEmpty)
-                Text(c.phone!, style: TextStyle(color: AppColors.textDim, fontSize: 12)),
-            ]),
+            child: _loading
+                ? Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView(padding: EdgeInsets.fromLTRB(14, 4, 14, 24), children: [
+                      Row(children: [
+                        _tile('Мы должны', owed > 0.5 ? '−${money(owed)}' : money(0), AppColors.danger),
+                        SizedBox(width: 10),
+                        _tile('Оплачено', money(paid), Color(0xFF16A34A)),
+                      ]),
+                      SizedBox(height: 12),
+                      TextField(
+                        controller: _q,
+                        onChanged: (_) => setState(() {}),
+                        style: TextStyle(color: AppColors.text, fontSize: 16),
+                        decoration: glassInput('Поиск поставщика', suffix: Icon(Icons.search, color: AppColors.textDim))
+                            .copyWith(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 13)),
+                      ),
+                      SizedBox(height: 10),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(children: [_chip('all', 'Все'), _chip('owe', 'Мы должны'), _chip('soon', 'Срок близко')]),
+                      ),
+                      SizedBox(height: 10),
+                      if (list.isEmpty)
+                        Padding(
+                          padding: EdgeInsets.only(top: 30),
+                          child: Center(
+                            child: Text('Поставщиков нет.',
+                                textAlign: TextAlign.center, style: TextStyle(color: AppColors.textDim)),
+                          ),
+                        )
+                      else
+                        GlassCard(
+                          radius: 16,
+                          padding: EdgeInsets.symmetric(vertical: 2),
+                          child: Column(children: [
+                            for (var i = 0; i < list.length; i++) ...[
+                              if (i > 0) Divider(height: 1, color: AppColors.overlay(0.08)),
+                              _row(list[i]),
+                            ],
+                          ]),
+                        ),
+                    ]),
+                  ),
           ),
-          if (c.nearestDue != null && c.owed > 0.5)
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: warn ? AppColors.warn.withOpacity(0.15) : AppColors.overlay(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(c.overdue ? 'просрочен' : 'до ${dateText(c.nearestDue!)}',
-                  style: TextStyle(
-                      color: warn ? AppColors.warn : AppColors.text, fontSize: 12, fontWeight: FontWeight.w700)),
-            ),
         ]),
-        SizedBox(height: 10),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(
-            value: paidShare,
-            minHeight: 12,
-            color: AppColors.accent,
-            backgroundColor: AppColors.amber,
-          ),
-        ),
-        SizedBox(height: 8),
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text('Взяли: ${money(c.taken)}', style: TextStyle(color: AppColors.textDim)),
-          Text('Долг: ${money(c.owed)}', style: TextStyle(color: AppColors.warn, fontWeight: FontWeight.w800)),
-        ]),
-      ]),
+      ),
     );
   }
+}
+
+class _SupRow {
+  final SupplierDebt debt;
+  final DateTime? last;
+  _SupRow(this.debt, this.last);
 }
 
 /// Один поставщик: поступления в долг, оплаты и кнопка «Оплатить».

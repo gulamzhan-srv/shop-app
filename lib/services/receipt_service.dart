@@ -73,6 +73,33 @@ class ReceiptRow {
   ReceiptRow(this.id, this.date, this.supplier, this.author, this.total, this.linesCount);
 }
 
+/// Строка накладной для списка и печати.
+class DocLine {
+  final String name;
+  final String unit;
+  final double qty;
+  final double price;
+  final double sum;
+  DocLine(this.name, this.unit, this.qty, this.price, this.sum);
+}
+
+/// Поступление целиком (для списка-накладных и печатной формы).
+class ReceiptDoc {
+  final String id;
+  final int number; // порядковый номер (по дате)
+  final DateTime date;
+  final String supplier;
+  final String author;
+  final String? comment;
+  final double total;
+  final double paid;
+  final List<DocLine> lines;
+  ReceiptDoc(this.id, this.number, this.date, this.supplier, this.author, this.comment, this.total, this.paid,
+      this.lines);
+  double get qty => lines.fold(0, (s, l) => s + l.qty);
+  double get debt => total - paid;
+}
+
 class ReceiptService {
   ReceiptService._();
   static final ReceiptService instance = ReceiptService._();
@@ -116,6 +143,52 @@ class ReceiptService {
               r['cnt'] as int,
             ))
         .toList();
+  }
+
+  /// Поступления за период с товарами — для списка в виде накладных.
+  Future<List<ReceiptDoc>> docs(DateTime from, DateTime to, {String query = ''}) async {
+    final db = await AppDatabase.instance.db;
+    final q = query.trim();
+    final rows = await db.rawQuery('''
+      SELECT r.id, r.doc_date, r.total, r.paid, r.comment,
+        COALESCE(s.name, 'Без поставщика') AS supplier,
+        COALESCE(e.name, '') AS author,
+        (SELECT COUNT(*) FROM receipts r2 WHERE r2.deleted = 0 AND r2.opening = 0
+           AND (r2.doc_date < r.doc_date OR (r2.doc_date = r.doc_date AND r2.id <= r.id))) AS num
+      FROM receipts r
+      LEFT JOIN suppliers s ON s.id = r.supplier_id
+      LEFT JOIN employees e ON e.id = r.author_id
+      WHERE r.deleted = 0 AND r.opening = 0 AND r.doc_date >= ? AND r.doc_date < ?
+      ORDER BY r.doc_date DESC''', [from.millisecondsSinceEpoch, to.millisecondsSinceEpoch]);
+    final out = <ReceiptDoc>[];
+    for (final r in rows) {
+      final no = r['num'] as int;
+      final supplier = r['supplier'] as String;
+      if (q.isNotEmpty && !supplier.toLowerCase().contains(q.toLowerCase()) && '$no' != q.replaceAll('№', '').trim()) {
+        continue;
+      }
+      final lines = await db.rawQuery('''
+        SELECT p.name, p.unit, l.qty, l.price, l.sum
+        FROM receipt_lines l JOIN products p ON p.id = l.product_id
+        WHERE l.receipt_id = ? AND l.deleted = 0 ORDER BY l.rowid''', [r['id']]);
+      final total = (r['total'] as num).toDouble();
+      out.add(ReceiptDoc(
+        r['id'] as String,
+        no,
+        DateTime.fromMillisecondsSinceEpoch(r['doc_date'] as int),
+        supplier,
+        r['author'] as String,
+        r['comment'] as String?,
+        total,
+        ((r['paid'] as num?) ?? total).toDouble(),
+        [
+          for (final l in lines)
+            DocLine(l['name'] as String, l['unit'] as String, (l['qty'] as num).toDouble(),
+                (l['price'] as num).toDouble(), (l['sum'] as num).toDouble()),
+        ],
+      ));
+    }
+    return out;
   }
 
   Future<Receipt> load(String id) async {

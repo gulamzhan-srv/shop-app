@@ -35,6 +35,9 @@ dependencies:
   google_sign_in: ^6.2.1
   googleapis: ^13.2.0
   extension_google_sign_in_as_googleapis_auth: ^2.0.12
+  # Печать накладных (PDF: печать, сохранение, отправка в WhatsApp и т.п.)
+  pdf: ^3.11.1
+  printing: ^5.13.4
 
 dev_dependencies:
   flutter_test:
@@ -45,3 +48,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon.png
+    - assets/fonts/

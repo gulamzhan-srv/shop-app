@@ -8,6 +8,7 @@
 import '../db/database.dart';
 import 'debt_service.dart';
 import 'shift_service.dart';
+import 'supplier_debt_service.dart';
 
 enum Period { day, week, month, quarter, year }
 
@@ -66,7 +67,29 @@ class Dashboard {
   final double stockQty;
   final double stockSum;
   final int pendingReturns;
+  // Для KPI-блоков: прошлый период, число должников, наш долг, возвраты и мини-столбики за 7 дней.
+  final double prevReceipts;
+  final double prevCashOut;
+  final int debtors;
+  final double supplierDebts;
+  final int suppliersOwed;
+  final double returns;
+  final int returnsCount;
+  final double prevReturns;
+  final List<double> salesDays, receiptsDays, cashOutDays, returnsDays;
   Dashboard({
+    this.prevReceipts = 0,
+    this.prevCashOut = 0,
+    this.debtors = 0,
+    this.supplierDebts = 0,
+    this.suppliersOwed = 0,
+    this.returns = 0,
+    this.returnsCount = 0,
+    this.prevReturns = 0,
+    this.salesDays = const [],
+    this.receiptsDays = const [],
+    this.cashOutDays = const [],
+    this.returnsDays = const [],
     required this.sales,
     required this.prevSales,
     required this.bars,
@@ -209,6 +232,24 @@ class AnalyticsService {
     return out;
   }
 
+  /// Суммы по дням за последние 7 дней (для мини-столбиков в KPI-блоках).
+  Future<List<double>> _days(String sql) async {
+    final db = await AppDatabase.instance.db;
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day).subtract(Duration(days: 6));
+    final rows = await db.rawQuery(sql, [from.millisecondsSinceEpoch]);
+    final map = {for (final r in rows) r['k'] as String: ((r['v'] as num?) ?? 0).toDouble()};
+    return [
+      for (var i = 0; i < 7; i++)
+        () {
+          final d = from.add(Duration(days: i));
+          return map['${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}'] ?? 0.0;
+        }(),
+    ];
+  }
+
+  static String _dayKey(String col) => "strftime('%Y-%m-%d', $col / 1000, 'unixepoch', 'localtime')";
+
   Future<List<StockItem>> stock() async {
     final db = await AppDatabase.instance.db;
     final rows = await db.rawQuery('''
@@ -253,6 +294,21 @@ class AnalyticsService {
         'SELECT COALESCE(SUM(qty_left),0) AS q, COALESCE(SUM(qty_left * cost_price),0) AS s FROM batch_left WHERE qty_left > 0');
     final pend = await db.rawQuery("SELECT COUNT(*) AS c FROM returns WHERE deleted = 0 AND status = 'pending'");
 
+    final prevRec = await _one(
+        'SELECT SUM(total) FROM receipts WHERE deleted = 0 AND opening = 0 AND doc_date >= ? AND doc_date < ?',
+        [prev.a, prev.b]);
+    final prevOut = await _one(
+        "SELECT SUM(amount) FROM cash_ops WHERE deleted = 0 AND kind = 'out' AND op_date >= ? AND op_date < ?",
+        [prev.a, prev.b]);
+    final ret = await db.rawQuery(
+        "SELECT COALESCE(SUM(refund),0) AS s, COUNT(*) AS c FROM returns WHERE deleted = 0 AND status = 'approved' AND approved_at >= ? AND approved_at < ?",
+        [cur.a, cur.b]);
+    final prevRet = await _one(
+        "SELECT SUM(refund) FROM returns WHERE deleted = 0 AND status = 'approved' AND approved_at >= ? AND approved_at < ?",
+        [prev.a, prev.b]);
+    final debtors = (await DebtService.instance.byCustomer(onlyOwing: true)).length;
+    final sup = await SupplierDebtService.instance.bySupplier(onlyOwing: true);
+
     return Dashboard(
       sales: sales,
       prevSales: prevSales,
@@ -270,6 +326,22 @@ class AnalyticsService {
       stockQty: (st.first['q'] as num).toDouble(),
       stockSum: (st.first['s'] as num).toDouble(),
       pendingReturns: pend.first['c'] as int,
+      prevReceipts: prevRec,
+      prevCashOut: prevOut,
+      debtors: debtors,
+      supplierDebts: sup.fold<double>(0, (a, x) => a + x.owed),
+      suppliersOwed: sup.length,
+      returns: (ret.first['s'] as num).toDouble(),
+      returnsCount: ret.first['c'] as int,
+      prevReturns: prevRet,
+      salesDays: await _days('SELECT ${_dayKey('sale_date')} AS k, SUM(total) AS v FROM sales '
+          'WHERE deleted = 0 AND opening = 0 AND sale_date >= ? GROUP BY k'),
+      receiptsDays: await _days('SELECT ${_dayKey('doc_date')} AS k, SUM(total) AS v FROM receipts '
+          'WHERE deleted = 0 AND opening = 0 AND doc_date >= ? GROUP BY k'),
+      cashOutDays: await _days("SELECT ${_dayKey('op_date')} AS k, SUM(amount) AS v FROM cash_ops "
+          "WHERE deleted = 0 AND kind = 'out' AND op_date >= ? GROUP BY k"),
+      returnsDays: await _days("SELECT ${_dayKey('approved_at')} AS k, SUM(refund) AS v FROM returns "
+          "WHERE deleted = 0 AND status = 'approved' AND approved_at >= ? GROUP BY k"),
     );
   }
 }

@@ -10,7 +10,7 @@ import '../services/receipt_service.dart';
 import '../services/supplier_service.dart';
 import '../ui/format.dart';
 import '../ui/glass.dart';
-import '../ui/product_picker.dart';
+import '../ui/receipt_picker.dart';
 
 class _LineEdit {
   final String productId;
@@ -189,17 +189,23 @@ class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
     setState(() => _supplierId = id);
   }
 
+  /// Подбор товаров: сразу несколько, с ценой закупки и количеством (и «Новый товар»).
   Future<void> _addLine() async {
-    final p = await pickProduct(context);
-    if (p == null || !mounted) return;
-    if (_lines.any((l) => l.productId == p.id)) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('«${p.name}» уже есть в документе')));
-      return;
-    }
-    final db = await AppDatabase.instance.db;
-    final cost = await FifoService.instance.lastCost(db, p.id!) ?? 0;
-    setState(() => _lines.add(_LineEdit(p.id!, p.name, p.unit, 1, cost)));
+    final picked = await pickReceiptLines(context);
+    if (picked == null || picked.isEmpty || !mounted) return;
+    setState(() {
+      for (final x in picked) {
+        final i = _lines.indexWhere((l) => l.productId == x.product.id);
+        if (i >= 0) {
+          // Уже есть в документе — прибавляем количество, цену берём новую.
+          final l = _lines[i];
+          l.qty.text = qtyText(l.q + x.qty);
+          if (x.price > 0) l.price.text = qtyText(x.price);
+        } else {
+          _lines.add(_LineEdit(x.product.id!, x.product.name, x.product.unit, x.qty, x.price));
+        }
+      }
+    });
   }
 
   Future<void> _save() async {
@@ -390,7 +396,7 @@ class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
                   OutlinedButton.icon(
                     onPressed: _addLine,
                     icon: Icon(Icons.add),
-                    label: Text('Добавить товар'),
+                    label: Text('Подобрать товары'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.accent,
                       minimumSize: Size.fromHeight(52),

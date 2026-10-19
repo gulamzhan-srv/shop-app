@@ -245,6 +245,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           child: Text('${user?.name ?? ''} · ${user == null ? '' : roleName(user.role).toLowerCase()}',
               style: TextStyle(color: AppColors.textDim, fontSize: 13)),
         ),
+        // Хозяин и администратор: сразу дашборд — продажи, KPI-блоки, сравнение с прошлым периодом.
+        if (_manager) ...[
+          AnalyticsView(key: _analytics),
+          SizedBox(height: 4),
+        ],
         _section('Быстрые действия'),
         _grid([
           _tile(Icons.shopping_cart_outlined, 'Продажа', () => _go(SaleScreen())),
@@ -286,8 +291,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _reportsPage() => RefreshIndicator(
         onRefresh: () => _refresh(),
         child: _page('Отчёты', [
-          AnalyticsView(key: _analytics),
-          _section('Подробно'),
+          _section('Подробные отчёты'),
           _grid([
             _tile(Icons.bar_chart_outlined, 'Продажи и маржа', () => _go(ReportsScreen()),
                 hint: 'товары, чеки, клиенты'),

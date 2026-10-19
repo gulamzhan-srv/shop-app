@@ -13,7 +13,13 @@ class AppPalette {
   final Brightness brightness;
   final Color bg, text, textDim, accent, onAccent, warn, amber, danger, blob1, blob2, sheet;
   final double blobOpacity;
+  /// true — «плоская» тема: белые карточки с тенью вместо стекла, без цветных пятен.
+  final bool solid;
+  /// Цвет заливки шапки экрана и строки состояния (null — прозрачная шапка).
+  final Color? header;
   AppPalette({
+    this.solid = false,
+    this.header,
     required this.id,
     required this.name,
     required this.brightness,
@@ -33,8 +39,17 @@ class AppPalette {
   bool get dark => brightness == Brightness.dark;
 }
 
-/// Темы приложения: Ночь, День, Рубин (красная), Зумруд (зелёная).
+/// Темы приложения: GRS (красно-белая), Ночь, День, Рубин (красная), Зумруд (зелёная).
 class AppThemes {
+  /// Фирменная тема GRS Soft: красная шапка, белые карточки, светло-серый фон.
+  static final grs = AppPalette(
+    id: 'grs', name: 'GRS (красно-белая)', brightness: Brightness.light,
+    bg: Color(0xFFF3F4F6), text: Color(0xFF111827), textDim: Color(0xFF6B7280),
+    accent: Color(0xFFD7191F), onAccent: Color(0xFFFFFFFF),
+    warn: Color(0xFFC2410C), amber: Color(0xFFF59E0B), danger: Color(0xFFDC2626),
+    blob1: Color(0xFFF3F4F6), blob2: Color(0xFFF3F4F6), sheet: Color(0xFFFFFFFF), blobOpacity: 0,
+    solid: true, header: Color(0xFFD7191F),
+  );
   static final night = AppPalette(
     id: 'night', name: 'Ночь', brightness: Brightness.dark,
     bg: Color(0xFF0B0F17), text: Color(0xFFF5F7FA), textDim: Color(0xBFF5F7FA),
@@ -63,17 +78,22 @@ class AppThemes {
     warn: Color(0xFFB45309), amber: Color(0xFFF2B705), danger: Color(0xFFDC2626),
     blob1: Color(0xFF15A06E), blob2: Color(0xFFFFC72C), sheet: Color(0xFFFFFFFF), blobOpacity: 0.25,
   );
-  static final all = [night, day, kaspi, halyk];
+  static final all = [grs, night, day, kaspi, halyk];
 
   /// Текущая тема. Меняется в разделе «Тема», сохраняется на телефоне.
-  static final current = ValueNotifier<AppPalette>(night);
+  static final current = ValueNotifier<AppPalette>(grs);
 
-  static AppPalette byId(String? id) => all.firstWhere((p) => p.id == id, orElse: () => night);
+  static AppPalette byId(String? id) => all.firstWhere((p) => p.id == id, orElse: () => grs);
 
   /// Загрузить сохранённую тему (при запуске).
   static Future<void> load() async {
     try {
       final p = await SharedPreferences.getInstance();
+      // Один раз после обновления включаем фирменную тему GRS (потом можно сменить в «Настройки → Тема»).
+      if (!(p.getBool('theme_grs_set') ?? false)) {
+        await p.setBool('theme_grs_set', true);
+        await p.setString('theme', grs.id);
+      }
       current.value = byId(p.getString('theme'));
     } catch (_) {}
   }
@@ -108,10 +128,13 @@ class AppColors {
   static Color get danger => _p.danger;
   static Color get sheet => _p.sheet;
   static bool get dark => _p.dark;
+  static bool get solid => _p.solid;
+  static Color? get header => _p.header;
 
   /// Полупрозрачная заливка «стекла»: в тёмной теме — белая, в светлой — тёмная.
-  static Color overlay(double opacity) =>
-      _p.dark ? Colors.white.withOpacity(opacity) : Colors.black.withOpacity(opacity * 0.7);
+  static Color overlay(double opacity) => _p.dark
+      ? Colors.white.withOpacity(opacity)
+      : Colors.black.withOpacity(opacity * (_p.solid ? 0.45 : 0.7));
 }
 
 /// Фон экрана: тёмный цвет + размытые цветные пятна.
@@ -129,8 +152,22 @@ class GlassBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     // Значки строки состояния: светлые на тёмной теме, тёмные на светлой.
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: AppColors.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
-      child: _body(),
+      value: (AppColors.dark || AppColors.header != null) ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      child: AppColors.solid ? _flat(context) : _body(),
+    );
+  }
+
+  /// Плоская тема: ровный фон, строка состояния в цвет шапки.
+  Widget _flat(BuildContext context) {
+    final top = MediaQuery.of(context).padding.top;
+    return Container(
+      color: AppColors.bg,
+      child: Column(children: [
+        if (AppColors.header != null) Container(height: top, color: AppColors.header),
+        Expanded(
+          child: SafeArea(top: AppColors.header == null, child: child),
+        ),
+      ]),
     );
   }
 
@@ -175,6 +212,24 @@ class GlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = this.radius * roundness;
+    if (AppColors.solid) {
+      // Плоская тема: белая карточка с мягкой тенью.
+      final flat = Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          color: AppColors.sheet,
+          borderRadius: BorderRadius.circular(radius + 4),
+          border: Border.all(color: borderColor ?? Color(0xFFE5E7EB)),
+          boxShadow: [BoxShadow(color: Color(0x0F000000), blurRadius: 10, offset: Offset(0, 3))],
+        ),
+        child: child,
+      );
+      if (onTap == null) return flat;
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(borderRadius: BorderRadius.circular(radius + 4), onTap: onTap, child: flat),
+      );
+    }
     final card = ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: BackdropFilter(
@@ -227,6 +282,41 @@ class GlassHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final h = AppColors.header;
+    if (h != null) {
+      // Плоская тема: шапка залита фирменным цветом, текст и значки белые.
+      return Container(
+        color: h,
+        padding: EdgeInsets.fromLTRB(12, 8, 8, 10),
+        margin: EdgeInsets.only(bottom: 8),
+        child: Row(children: [
+          Material(
+            color: Colors.white.withOpacity(0.16),
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => Navigator.of(context).maybePop(),
+              child: Padding(
+                padding: EdgeInsets.all(9),
+                child: Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18, semanticLabel: 'Назад'),
+              ),
+            ),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+          ),
+          if (actions.isNotEmpty)
+            ColorFiltered(
+              colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
+              child: Row(mainAxisSize: MainAxisSize.min, children: actions),
+            ),
+        ]),
+      );
+    }
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 8, 16, 6),
       child: Row(children: [
