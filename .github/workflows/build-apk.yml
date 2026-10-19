@@ -1,0 +1,57 @@
+# Сборка готового APK на серверах GitHub (бесплатно).
+# Запускается сама при каждой загрузке кода, или вручную: Actions → «Собрать APK» → Run workflow.
+# Готовый файл: вкладка Releases → «Магазин» → avtomag-grs-soft.apk (можно скачать прямо с телефона).
+name: Собрать APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.29.3'   # проверенная версия, с ней совпадают все библиотеки
+          cache: true
+
+      - name: Создать Android-часть проекта
+        run: flutter create --platforms=android --org kz.grs .
+
+      - name: Настроить разрешения, уведомления и подпись
+        run: dart run tool/setup_android.dart
+
+      - name: Скачать библиотеки
+        run: flutter pub get
+
+      - name: Собрать APK
+        run: |
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk avtomag-grs-soft.apk
+
+      - name: Сохранить APK (Actions → Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: shop-app-apk
+          path: avtomag-grs-soft.apk
+
+      - name: Выложить APK в Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: AVTOMAG GRS SOFT — сборка ${{ github.run_number }}
+          files: avtomag-grs-soft.apk
+          make_latest: true
