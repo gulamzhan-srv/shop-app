@@ -11,6 +11,7 @@ import '../db/database.dart';
 import '../db/repo.dart';
 import 'auth_service.dart';
 import 'fifo_service.dart';
+import 'notification_service.dart';
 
 class ReceiptLine {
   final String productId;
@@ -37,7 +38,13 @@ class Receipt {
   final String? authorName;
   final String? deviceName;
   final List<ReceiptLine> lines;
+  /// Сколько оплачено поставщику при поступлении (null = оплачено полностью).
+  final double? paid;
+  /// До какого числа оплатить остаток (если взято в долг).
+  final DateTime? dueDate;
   Receipt({
+    this.paid,
+    this.dueDate,
     this.id,
     required this.date,
     this.supplierId,
@@ -48,6 +55,8 @@ class Receipt {
     this.lines = const [],
   });
   double get total => lines.fold(0, (s, l) => s + l.sum);
+  double get paidSum => paid ?? total;
+  double get debt => total - paidSum;
 }
 
 /// Краткая строка для списка документов.
@@ -126,6 +135,8 @@ class ReceiptService {
       comment: h['comment'] as String?,
       authorName: h['author_name'] as String?,
       deviceName: h['device_name'] as String?,
+      paid: (h['paid'] as num?)?.toDouble(),
+      dueDate: h['due_date'] == null ? null : DateTime.fromMillisecondsSinceEpoch(h['due_date'] as int),
       lines: lines
           .map((l) => ReceiptLine(
                 productId: l['product_id'] as String,
@@ -156,6 +167,9 @@ class ReceiptService {
       if (l.qty <= 0) return 'Количество у «${l.productName}» должно быть больше 0';
       if (l.price < 0) return 'Цена у «${l.productName}» не может быть меньше 0';
     }
+    if (rc.paidSum < 0) return 'Оплаченная сумма не может быть меньше 0';
+    if (rc.paidSum > rc.total + 0.5) return 'Оплачено больше, чем сумма поступления';
+    if (rc.debt > 0.5 && rc.supplierId == null) return 'Чтобы взять товар в долг, выберите поставщика';
     if (rc.id != null && !await canChange(rc.id!)) {
       return 'Товар из этого поступления уже продавался — документ менять нельзя';
     }
@@ -177,6 +191,8 @@ class ReceiptService {
           'author_id': author.id,
           'device_name': device,
           'total': rc.total,
+          'paid': rc.paidSum,
+          'due_date': rc.debt > 0.5 ? rc.dueDate?.millisecondsSinceEpoch : null,
         },
         txn: txn,
       );
@@ -200,6 +216,8 @@ class ReceiptService {
             costPrice: l.price);
       }
     });
+    // Напоминания о сроке оплаты поставщику.
+    NotificationService.instance.rescheduleDebts().catchError((_) {});
     return null;
   }
 

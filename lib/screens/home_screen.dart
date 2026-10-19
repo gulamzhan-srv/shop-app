@@ -20,6 +20,7 @@ import 'products_screen.dart';
 import 'receipts_screen.dart';
 import 'reports_screen.dart';
 import 'returns_screen.dart';
+import 'supplier_debts_screen.dart';
 import 'sync_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -188,6 +189,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _menu(Icons.inventory_2_outlined, 'Товары', ProductsScreen()),
       _menu(Icons.local_shipping_outlined, 'Поступления', ReceiptsScreen()),
       _menu(Icons.people_alt_outlined, 'Долги', DebtsScreen()),
+      if (owner) _menu(Icons.request_quote_outlined, 'Долги поставщикам', SupplierDebtsScreen()),
       _menu(Icons.assignment_return_outlined, 'Возвраты', ReturnsScreen()),
       _menu(Icons.receipt_long_outlined, 'Чеки', ChecksScreen()),
       if (owner) _menu(Icons.bar_chart_outlined, 'Отчёты', ReportsScreen()),

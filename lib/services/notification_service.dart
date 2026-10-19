@@ -12,6 +12,7 @@ import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../db/database.dart';
+import 'supplier_debt_service.dart';
 
 class NotificationService {
   NotificationService._();
@@ -85,5 +86,32 @@ class NotificationService {
         );
       }
     }
+
+    // Долги перед поставщиками: тоже за 3, 2 и 1 день до срока.
+    try {
+      for (final s in await SupplierDebtService.instance.bySupplier(onlyOwing: true)) {
+        for (final d in await SupplierDebtService.instance.docsOf(s.supplierId)) {
+          if (d.remaining < 0.5 || d.due == null) continue;
+          final due = d.due!;
+          final dueText = '${due.day.toString().padLeft(2, '0')}.${due.month.toString().padLeft(2, '0')}';
+          for (var daysBefore = 3; daysBefore >= 1; daysBefore--) {
+            final x = due.subtract(Duration(days: daysBefore));
+            final at = tz.TZDateTime(tz.local, x.year, x.month, x.day, 10);
+            if (!at.isAfter(now)) continue;
+            final id = (('sup${d.receiptId}').hashCode & 0x0FFFFFFF) * 4 + daysBefore;
+            await _plugin.zonedSchedule(
+              id,
+              'Долг поставщику: ${s.name}',
+              'Оплатить ${d.remaining.round()} ₸ до $dueText'
+                  '${daysBefore == 1 ? ' (завтра)' : ' (через $daysBefore дн.)'}',
+              at,
+              NotificationDetails(android: _channel),
+              androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+              uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+            );
+          }
+        }
+      }
+    } catch (_) {}
   }
 }

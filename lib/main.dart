@@ -19,7 +19,7 @@ final _bootStatus = ValueNotifier<String>('Запуск…');
 bool _appStarted = false;
 
 /// Метка версии: видна на экране загрузки и на экране ошибки.
-const _buildTag = 'версия 19.10-3';
+const _buildTag = 'версия 19.10-4';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

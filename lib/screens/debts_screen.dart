@@ -3,9 +3,11 @@
 
 import 'package:flutter/material.dart';
 
+import '../services/auth_service.dart';
 import '../services/debt_service.dart';
 import '../ui/format.dart';
 import '../ui/glass.dart';
+import 'supplier_debts_screen.dart';
 
 class DebtsScreen extends StatefulWidget {
   DebtsScreen({super.key});
@@ -46,6 +48,24 @@ class _DebtsScreenState extends State<DebtsScreen> {
             child: _loading
                 ? Center(child: CircularProgressIndicator())
                 : ListView(padding: EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
+                    if (AuthService.instance.current?.isManager ?? false) ...[
+                      GlassCard(
+                        radius: 16,
+                        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        onTap: () => Navigator.of(context)
+                            .push(MaterialPageRoute(builder: (_) => SupplierDebtsScreen())),
+                        child: Row(children: [
+                          Icon(Icons.request_quote_outlined, color: AppColors.accent),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text('Наши долги поставщикам',
+                                style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w700)),
+                          ),
+                          Icon(Icons.chevron_right, color: AppColors.textDim),
+                        ]),
+                      ),
+                      SizedBox(height: 10),
+                    ],
                     GlassCard(
                       child: Row(children: [
                         Expanded(

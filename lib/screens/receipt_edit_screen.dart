@@ -39,6 +39,10 @@ class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
   String? _supplierId;
   List<Supplier> _suppliers = [];
   final _comment = TextEditingController();
+  // Долг поставщику: взяли товар в долг, оплатили часть (или ничего) и срок оплаты остатка.
+  bool _onCredit = false;
+  final _paid = TextEditingController(text: '0');
+  DateTime _due = DateTime.now().add(Duration(days: 7));
   final List<_LineEdit> _lines = [];
   String? _author;
   String? _device;
@@ -66,6 +70,11 @@ class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
       _comment.text = r.comment ?? '';
       _author = r.authorName;
       _device = r.deviceName;
+      if (r.debt > 0.5) {
+        _onCredit = true;
+        _paid.text = qtyText(r.paidSum);
+        if (r.dueDate != null) _due = r.dueDate!;
+      }
       for (final l in r.lines) {
         _lines.add(_LineEdit(l.productId, l.productName, l.unit, l.qty, l.price));
       }
@@ -77,6 +86,66 @@ class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
   }
 
   double get _total => _lines.fold(0, (s, l) => s + l.sum);
+  double get _paidNow => _onCredit ? (parseNum(_paid.text) ?? 0) : _total;
+  double get _debtNow => _total - _paidNow;
+
+  Future<void> _pickDue() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _due,
+      firstDate: DateTime.now().subtract(Duration(days: 365)),
+      lastDate: DateTime.now().add(Duration(days: 730)),
+    );
+    if (d != null) setState(() => _due = DateTime(d.year, d.month, d.day, 12));
+  }
+
+  Widget _paymentCard() {
+    return GlassCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: Text('Взять в долг у поставщика',
+                style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w700)),
+          ),
+          Switch(
+            value: _onCredit,
+            onChanged: _readOnly ? null : (v) => setState(() => _onCredit = v),
+          ),
+        ]),
+        if (!_onCredit)
+          Text('Оплачено полностью', style: TextStyle(color: AppColors.textDim, fontSize: 13)),
+        if (_onCredit) ...[
+          SizedBox(height: 8),
+          TextField(
+            controller: _paid,
+            enabled: !_readOnly,
+            onChanged: (_) => setState(() {}),
+            keyboardType: TextInputType.numberWithOptions(decimal: true),
+            style: TextStyle(color: AppColors.text),
+            decoration: glassInput('Оплачено сразу, ₸ (0 — всё в долг)'),
+          ),
+          SizedBox(height: 10),
+          GlassCard(
+            radius: 14,
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            onTap: _readOnly ? null : _pickDue,
+            child: Row(children: [
+              Icon(Icons.event_outlined, color: AppColors.textDim, size: 20),
+              SizedBox(width: 8),
+              Text('Оплатить остаток до ${dateText(_due)}',
+                  style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w700)),
+            ]),
+          ),
+          SizedBox(height: 10),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text('Долг поставщику', style: TextStyle(color: AppColors.textDim)),
+            Text(money(_debtNow < 0 ? 0 : _debtNow),
+                style: TextStyle(color: AppColors.warn, fontSize: 18, fontWeight: FontWeight.w800)),
+          ]),
+        ],
+      ]),
+    );
+  }
 
   Future<void> _pickDate() async {
     final d = await showDatePicker(
@@ -139,6 +208,8 @@ class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
       date: _date,
       supplierId: _supplierId,
       comment: _comment.text,
+      paid: _onCredit ? (parseNum(_paid.text) ?? 0) : null,
+      dueDate: _onCredit ? _due : null,
       lines: [
         for (final l in _lines)
           ReceiptLine(productId: l.productId, productName: l.name, unit: l.unit, qty: l.q, price: l.p),
@@ -331,6 +402,10 @@ class _ReceiptEditScreenState extends State<ReceiptEditScreen> {
                         style: TextStyle(color: AppColors.text, fontSize: 22, fontWeight: FontWeight.w800)),
                   ]),
                 ),
+                if (!_hidePrices) ...[
+                  SizedBox(height: 12),
+                  _paymentCard(),
+                ],
                 if (_error != null)
                   Padding(
                     padding: EdgeInsets.only(top: 12),

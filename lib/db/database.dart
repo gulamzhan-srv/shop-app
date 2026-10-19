@@ -14,7 +14,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _dbName = 'shop.db';
-  static const _dbVersion = 4;
+  static const _dbVersion = 5;
 
   Database? _db;
 
@@ -159,6 +159,25 @@ class AppDatabase {
       )''',
       'CREATE INDEX idx_access_at ON access_log(at)',
     ],
+    5: [
+      // Долги перед поставщиками: сколько оплачено при поступлении и до какого числа оплатить остаток.
+      // paid = NULL у старых документов — значит оплачено полностью.
+      'ALTER TABLE receipts ADD COLUMN paid REAL',
+      'ALTER TABLE receipts ADD COLUMN due_date INTEGER',
+      // Оплаты поставщикам (гасят долг, начиная с самых старых поступлений).
+      '''CREATE TABLE supplier_payments (
+        id TEXT PRIMARY KEY, updated_at INTEGER NOT NULL, device_id TEXT NOT NULL,
+        deleted INTEGER NOT NULL DEFAULT 0,
+        supplier_id TEXT NOT NULL,
+        paid_at INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        payment TEXT NOT NULL,
+        employee_id TEXT NOT NULL,
+        comment TEXT
+      )''',
+      'CREATE INDEX idx_suppay_supplier ON supplier_payments(supplier_id)',
+      'CREATE INDEX idx_receipts_supplier ON receipts(supplier_id)',
+    ],
   };
 
   /// Таблицы с данными, которые синхронизируются между телефонами.
@@ -166,7 +185,7 @@ class AppDatabase {
     'employees', 'products', 'product_photos', 'suppliers', 'receipts', 'receipt_lines',
     'batches', 'shifts', 'customers', 'sales', 'sale_lines', 'sale_line_batches',
     'debt_payments', 'cash_ops', 'returns', 'return_lines', 'return_batches',
-    'settings', 'access_log',
+    'settings', 'access_log', 'supplier_payments',
   ];
 
   /// Общие служебные поля (вставляются в каждую таблицу).
