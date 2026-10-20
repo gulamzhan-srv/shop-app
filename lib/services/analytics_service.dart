@@ -39,7 +39,9 @@ class Range {
 class Bar {
   final String label;
   final double value;
-  Bar(this.label, this.value);
+  final DateTime? from; // для нажатия: период столбика (включительно)
+  final DateTime? to; // не включительно
+  Bar(this.label, this.value, {this.from, this.to});
 }
 
 class StockItem {
@@ -198,7 +200,8 @@ class AnalyticsService {
           m.isBefore(cur.to);
           m = DateTime(m.year, m.month + 1)) {
         final k = '${m.year}-${m.month.toString().padLeft(2, '0')}';
-        out.add(Bar(_months[m.month - 1], map[k] ?? 0));
+        out.add(Bar(_months[m.month - 1], map[k] ?? 0,
+            from: m, to: DateTime(m.year, m.month + 1)));
       }
       return out;
     }
@@ -227,20 +230,20 @@ class AnalyticsService {
       final d = DateTime(from.year, from.month, from.day + i);
       final k = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
       final label = p == Period.month ? '${d.day}' : _wd[d.weekday - 1];
-      out.add(Bar(label, map[k] ?? 0));
+      out.add(Bar(label, map[k] ?? 0, from: d, to: DateTime(d.year, d.month, d.day + 1)));
     }
     return out;
   }
 
-  /// Суммы по дням за последние 7 дней (для мини-столбиков в KPI-блоках).
+  /// Суммы по дням за последние 5 дней (для мини-столбиков в KPI-блоках).
   Future<List<double>> _days(String sql) async {
     final db = await AppDatabase.instance.db;
     final now = DateTime.now();
-    final from = DateTime(now.year, now.month, now.day).subtract(Duration(days: 6));
+    final from = DateTime(now.year, now.month, now.day).subtract(Duration(days: 4));
     final rows = await db.rawQuery(sql, [from.millisecondsSinceEpoch]);
     final map = {for (final r in rows) r['k'] as String: ((r['v'] as num?) ?? 0).toDouble()};
     return [
-      for (var i = 0; i < 7; i++)
+      for (var i = 0; i < 5; i++)
         () {
           final d = from.add(Duration(days: i));
           return map['${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}'] ?? 0.0;

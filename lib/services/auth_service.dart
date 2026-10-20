@@ -105,6 +105,7 @@ class AuthService {
   /// Создать сотрудника. PIN — 6 цифр, у всех сотрудников разный.
   Future<String?> addEmployee({required String name, required Role role, required String pin}) async {
     if (!_validPin(pin)) return _pinError;
+    if (role == Role.admin && !(current?.isAdmin ?? false)) return 'Администратора может добавить только администратор';
     if (await login(pin, remember: false) != null) return 'Такой PIN уже занят';
     final salt = _salt();
     await _repo.save('employees', {
@@ -137,8 +138,19 @@ class AuthService {
   }
 
   /// Все сотрудники (для экрана «Сотрудники»).
+  /// Администратора в списке видит только сам администратор.
   Future<List<Map<String, Object?>>> all() => _repo.list('employees',
+      where: (current?.isAdmin ?? false) ? null : "role <> 'admin'",
       orderBy: "CASE role WHEN 'admin' THEN 0 WHEN 'owner' THEN 1 ELSE 2 END, name COLLATE NOCASE");
+
+  /// Можно ли текущему пользователю менять PIN этому сотруднику:
+  /// администратор — всем; хозяин — только кассирам и себе.
+  bool canResetPin(Map<String, Object?> e) {
+    final me = current;
+    if (me == null) return false;
+    if (me.isAdmin) return true;
+    return e['role'] == 'cashier' || e['id'] == me.id;
+  }
 
   /// Включить / отключить сотрудника (отключённый не сможет войти).
   Future<String?> setActive(String id, bool active) async {
@@ -163,6 +175,10 @@ class AuthService {
     if (other != null && other.id != id) return 'Такой PIN уже занят';
     final rows = await _repo.list('employees', where: 'id = ?', args: [id]);
     if (rows.isEmpty) return 'Сотрудник не найден';
+    // Вошедший хозяин может сбросить PIN только кассиру или себе; администратору — только он сам.
+    if (current != null && !canResetPin(rows.first)) {
+      return 'Сменить PIN этому сотруднику может только администратор';
+    }
     final salt = _salt();
     await _repo.save('employees',
         {...rows.first, 'pin_hash': _hash(pin, salt), 'pin_salt': salt, 'pin_len': pinLength});
@@ -219,9 +235,11 @@ class AuthService {
     return _hash(_norm(code), j['salt'] as String) == j['hash'];
   }
 
-  /// Хозяева и администраторы — кому можно восстановить PIN кодом.
+  /// Кому можно восстановить PIN кодом: хозяевам (администратора на экране входа не показываем).
+  /// Если хозяев нет — только тогда администратору.
   Future<List<Employee>> managers() async {
-    final rows = await _repo.list('employees', where: "role IN ('owner','admin') AND active = 1");
+    var rows = await _repo.list('employees', where: "role = 'owner' AND active = 1");
+    if (rows.isEmpty) rows = await _repo.list('employees', where: "role = 'admin' AND active = 1");
     return rows.map(Employee.fromRow).toList();
   }
 

@@ -34,6 +34,8 @@ import 'sale_screen.dart';
 import 'theme_screen.dart';
 import 'supplier_debts_screen.dart';
 import 'sync_screen.dart' show SyncScreen, SyncProgressBar;
+import 'firm_screen.dart';
+import 'clear_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   HomeScreen({super.key});
@@ -327,6 +329,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           if (_manager) _tile(Icons.badge_outlined, 'Сотрудники', () => _go(EmployeesScreen()), hint: 'роли, PIN'),
           if (_admin) _tile(Icons.manage_search_outlined, 'Журнал входов', () => _go(JournalScreen())),
           if (_manager) _tile(Icons.playlist_add_check_outlined, 'Начальные остатки', () => _go(OpeningScreen())),
+          if (_manager) _tile(Icons.storefront_outlined, 'Реквизиты фирмы', () => _go(FirmScreen()), hint: 'адрес, телефон, логотип'),
+          if (_manager) _tile(Icons.cleaning_services_outlined, 'Очистка базы', () => _go(ClearScreen()), hint: 'пустая, документы, период'),
         ]),
         SizedBox(height: 18),
         Center(

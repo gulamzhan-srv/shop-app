@@ -51,7 +51,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
               segments: [
                 ButtonSegment(value: Role.cashier, label: Text('Кассир')),
                 ButtonSegment(value: Role.owner, label: Text('Хозяин')),
-                ButtonSegment(value: Role.admin, label: Text('Админ')),
+                if (AuthService.instance.current?.isAdmin ?? false)
+                  ButtonSegment(value: Role.admin, label: Text('Админ')),
               ],
               selected: {role},
               onSelectionChanged: (v) => setD(() => role = v.first),
@@ -161,11 +162,12 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                               style: TextStyle(color: AppColors.textDim, fontSize: 12)),
                         ]),
                       ),
-                      IconButton(
-                        onPressed: () => _changePin(e),
-                        icon: Icon(Icons.password, color: AppColors.text),
-                        tooltip: 'Сменить PIN',
-                      ),
+                      if (AuthService.instance.canResetPin(e))
+                        IconButton(
+                          onPressed: () => _changePin(e),
+                          icon: Icon(Icons.password, color: AppColors.text),
+                          tooltip: 'Сменить PIN',
+                        ),
                       Switch(
                         value: e['active'] == 1,
                         onChanged: (v) async {

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/analytics_service.dart';
 import '../ui/format.dart';
 import '../ui/glass.dart';
+import 'day_detail_screen.dart';
 import 'debts_screen.dart';
 import 'returns_screen.dart';
 import 'cash_ops_screen.dart';
@@ -65,10 +66,16 @@ class AnalyticsViewState extends State<AnalyticsView> {
     }
   }
 
-  /// 86400 → «86,4k», 1250000 → «1,25M»
+  /// 1000 → «1К», 1500 → «1,5К», 1000000 → «1М», 2400000 → «2,4М»
   String _short(double v) {
-    if (v.abs() >= 1e6) return '${(v / 1e6).toStringAsFixed(2).replaceAll('.', ',')}M';
-    if (v.abs() >= 1e3) return '${(v / 1e3).toStringAsFixed(1).replaceAll('.', ',')}k';
+    String f(double x) {
+      final t = x.toStringAsFixed(1);
+      return t.endsWith('.0') ? t.substring(0, t.length - 2) : t.replaceAll('.', ',');
+    }
+
+    final a = v.abs();
+    if (a >= 1e6 || (a >= 1e3 && double.parse((a / 1e3).toStringAsFixed(1)) >= 1000)) return '${f(v / 1e6)}М';
+    if (a >= 1e3) return '${f(v / 1e3)}К';
     return v.round().toString();
   }
 
@@ -174,9 +181,19 @@ class AnalyticsViewState extends State<AnalyticsView> {
         SizedBox(height: 6),
         Text(b.label, style: TextStyle(color: AppColors.textDim, fontSize: 11)),
       ]);
+      final tappable = b.from == null
+          ? col
+          : GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _open(DayDetailScreen(
+                  kind: DayKind.sales,
+                  from: b.from!,
+                  to: b.to!,
+                  title: 'Продажи · ${_barTitle(b)}')),
+              child: col);
       return barW == null
-          ? Expanded(child: Padding(padding: EdgeInsets.symmetric(horizontal: 3), child: col))
-          : SizedBox(width: barW, child: Padding(padding: EdgeInsets.symmetric(horizontal: 3), child: col));
+          ? Expanded(child: Padding(padding: EdgeInsets.symmetric(horizontal: 3), child: tappable))
+          : SizedBox(width: barW, child: Padding(padding: EdgeInsets.symmetric(horizontal: 3), child: tappable));
     }
 
     final bars = SizedBox(
@@ -223,6 +240,13 @@ class AnalyticsViewState extends State<AnalyticsView> {
     );
   }
 
+  String _barTitle(Bar b) {
+    final f = b.from!;
+    final isMonth = b.to!.difference(f).inDays > 27;
+    const m = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+    return isMonth ? '${m[f.month - 1]} ${f.year}' : dateText(f);
+  }
+
   Future<void> _open(Widget w) async {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => w));
     reload();
@@ -267,38 +291,67 @@ class AnalyticsViewState extends State<AnalyticsView> {
     );
   }
 
-  /// Мини-столбики за 7 дней, значение — над самым большим.
-  Widget _mini(List<double> v, Color c) {
-    if (v.isEmpty) return SizedBox(height: 34);
+  static const _wdShort = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+
+  /// 5 широких столбиков за последние 5 дней: сумма (1К, 1,5М) над столбиком, день недели под ним.
+  /// Нажатие на столбик открывает документы за этот день.
+  Widget _mini(List<double> v, Color c, DayKind? kind, String title) {
+    if (v.isEmpty) return SizedBox(height: 60);
     final maxV = v.fold<double>(0, (m, x) => x > m ? x : m);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     return SizedBox(
-      height: 34,
+      height: 62,
       child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-        for (final x in v)
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 2),
-              child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-                if (maxV > 0 && x == maxV)
-                  Text(_short(x),
-                      maxLines: 1,
-                      style: TextStyle(color: c, fontSize: 9, fontWeight: FontWeight.w800, height: 1.1)),
-                Container(
-                  height: maxV <= 0 ? 3 : (x / maxV * 22).clamp(3, 22).toDouble(),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: x == maxV && maxV > 0
-                          ? [c, c.withOpacity(0.45)]
-                          : [c.withOpacity(0.45), c.withOpacity(0.15)],
-                    ),
-                    borderRadius: BorderRadius.circular(3),
+        for (var i = 0; i < v.length; i++)
+          () {
+            final day = today.subtract(Duration(days: v.length - 1 - i));
+            final x = v[i];
+            final top = maxV > 0 && x == maxV;
+            final col = Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+              SizedBox(
+                height: 13,
+                child: x > 0
+                    ? FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(_short(x),
+                            maxLines: 1,
+                            style: TextStyle(color: top ? c : AppColors.textDim, fontSize: 10.5, fontWeight: FontWeight.w800)),
+                      )
+                    : null,
+              ),
+              SizedBox(height: 2),
+              Container(
+                height: maxV <= 0 ? 3 : (x / maxV * 30).clamp(3, 30).toDouble(),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: top ? [c, c.withOpacity(0.5)] : [c.withOpacity(0.55), c.withOpacity(0.2)],
                   ),
+                  borderRadius: BorderRadius.circular(4),
                 ),
-              ]),
-            ),
-          ),
+              ),
+              SizedBox(height: 3),
+              Text(_wdShort[day.weekday - 1],
+                  style: TextStyle(color: AppColors.textDim, fontSize: 10, fontWeight: FontWeight.w600)),
+            ]);
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 1.5),
+                child: kind == null
+                    ? col
+                    : GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _open(DayDetailScreen(
+                            kind: kind,
+                            from: day,
+                            to: DateTime(day.year, day.month, day.day + 1),
+                            title: '$title · ${dateText(day)}')),
+                        child: col),
+              ),
+            );
+          }(),
       ]),
     );
   }
@@ -315,6 +368,7 @@ class AnalyticsViewState extends State<AnalyticsView> {
     String? line1,
     String? line2,
     List<double>? days,
+    DayKind? kind,
     String? link,
     VoidCallback? onTap,
   }) =>
@@ -362,7 +416,7 @@ class AnalyticsViewState extends State<AnalyticsView> {
           if (link != null)
             Text('$link ›', style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 13))
           else if (days != null)
-            _mini(days, color),
+            _mini(days, color, kind, title),
         ]),
       );
 
@@ -380,6 +434,7 @@ class AnalyticsViewState extends State<AnalyticsView> {
           pct: d.delta,
           line1: 'было: ${money(d.prevSales)}',
           days: d.salesDays,
+          kind: DayKind.sales,
           onTap: () => _open(ReportsScreen(initialTab: 1))),
       _kpi(
           title: 'Прибыль (ФИФО)',
@@ -424,6 +479,7 @@ class AnalyticsViewState extends State<AnalyticsView> {
           line1: _ofSales(d.returns, d),
           line2: '${d.returnsCount} возвратов принято',
           days: d.returnsDays,
+          kind: DayKind.returns,
           onTap: () => _open(ReturnsScreen())),
       _kpi(
           title: 'Расходы из кассы',
@@ -436,6 +492,7 @@ class AnalyticsViewState extends State<AnalyticsView> {
           line1: _ofSales(d.cashOut, d),
           line2: '${d.cashOutCount} операций',
           days: d.cashOutDays,
+          kind: DayKind.cashOut,
           onTap: () => _open(CashOpsScreen())),
       _kpi(
           title: 'Поступления',
@@ -447,6 +504,7 @@ class AnalyticsViewState extends State<AnalyticsView> {
           line1: 'закупка у поставщиков',
           line2: '${d.receiptsCount} документов',
           days: d.receiptsDays,
+          kind: DayKind.receipts,
           onTap: () => _open(ReceiptsScreen())),
       _kpi(
           title: 'Остаток в кассе',
@@ -460,7 +518,7 @@ class AnalyticsViewState extends State<AnalyticsView> {
       final w = (box.maxWidth - 10) / 2;
       // Все KPI-блоки одного размера: одинаковая ширина и высота.
       return Wrap(spacing: 10, runSpacing: 10, children: [
-        for (final t in tiles) SizedBox(width: w, height: 196, child: t),
+        for (final t in tiles) SizedBox(width: w, height: 218, child: t),
       ]);
     });
   }

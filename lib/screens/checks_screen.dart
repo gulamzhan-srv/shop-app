@@ -173,7 +173,18 @@ Future<void> showCheck(BuildContext context, CheckRow c) async {
           OutlinedButton.icon(
             onPressed: () => PrintService.instance.check(context, c, lines),
             icon: Icon(Icons.picture_as_pdf_outlined),
-            label: Text('Чек в PDF: печать / отправить'),
+            label: Text('Товарный чек: печать / отправить'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.accent,
+              minimumSize: Size.fromHeight(46),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => PrintService.instance.saleInvoice(context, c, lines),
+            icon: Icon(Icons.description_outlined),
+            label: Text('Расходная накладная (A4)'),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.accent,
               minimumSize: Size.fromHeight(46),
